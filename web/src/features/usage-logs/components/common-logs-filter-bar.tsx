@@ -44,6 +44,7 @@ import { useMediaQuery } from '@/hooks'
 import { getUserGroups } from '@/lib/api'
 import { requireServerSuccess } from '@/lib/server-error-message'
 
+import { getLogFilterOptions } from '../api'
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
 import { buildSearchParams } from '../lib/filter'
 import { getDefaultTimeRange } from '../lib/utils'
@@ -91,6 +92,7 @@ function buildSearchSourceKey(values: {
   model?: unknown
   token?: unknown
   group?: unknown
+  tag?: unknown
   username?: unknown
   requestId?: unknown
   upstreamRequestId?: unknown
@@ -103,6 +105,7 @@ function buildSearchSourceKey(values: {
     values.model,
     values.token,
     values.group,
+    values.tag,
     values.username,
     values.requestId,
     values.upstreamRequestId,
@@ -145,6 +148,33 @@ export function CommonLogsFilterBar<TData>(
       .filter((group) => group !== 'auto')
       .map((group) => ({ label: group, value: group }))
   }, [isAdmin, adminGroups, userGroups])
+  const { data: filterOptions } = useQuery({
+    queryKey: ['log-filter-options', isAdmin],
+    queryFn: async () =>
+      requireServerSuccess(await getLogFilterOptions(isAdmin)),
+  })
+  const optionLists = useMemo(() => {
+    const options = filterOptions?.data
+    return {
+      models: (options?.models ?? []).map((model) => ({
+        label: model,
+        value: model,
+      })),
+      tokens: (options?.tokens ?? []).map((token) => ({
+        label: token,
+        value: token,
+      })),
+      users: (options?.users ?? []).map((username) => ({
+        label: username,
+        value: username,
+      })),
+      channels: (options?.channels ?? []).map((channel) => ({
+        label: `${channel.name} (#${channel.id})`,
+        value: String(channel.id),
+      })),
+      tags: (options?.tags ?? []).map((tag) => ({ label: tag, value: tag })),
+    }
+  }, [filterOptions])
 
   const searchState = useMemo<CommonLogDraft>(() => {
     const { start, end } = getDefaultTimeRange()
@@ -155,6 +185,7 @@ export function CommonLogsFilterBar<TData>(
       model: searchParams.model,
       token: searchParams.token,
       group: searchParams.group,
+      tag: searchParams.tag,
       username: searchParams.username,
       requestId: searchParams.requestId,
       upstreamRequestId: searchParams.upstreamRequestId,
@@ -169,6 +200,7 @@ export function CommonLogsFilterBar<TData>(
       model: searchParams.model || undefined,
       token: searchParams.token || undefined,
       group: searchParams.group || undefined,
+      tag: searchParams.tag || undefined,
       username: searchParams.username || undefined,
       requestId: searchParams.requestId || undefined,
       upstreamRequestId: searchParams.upstreamRequestId || undefined,
@@ -185,6 +217,7 @@ export function CommonLogsFilterBar<TData>(
     searchParams.model,
     searchParams.token,
     searchParams.group,
+    searchParams.tag,
     searchParams.username,
     searchParams.requestId,
     searchParams.upstreamRequestId,
@@ -278,7 +311,11 @@ export function CommonLogsFilterBar<TData>(
 
   const hasTypeFilter = logType !== LOG_TYPE_ALL_VALUE
   const hasAdditionalFilters =
-    !!filters.model || !!filters.group || hasTypeFilter || hasExpandedFilters
+    !!filters.model ||
+    !!filters.group ||
+    !!filters.tag ||
+    hasTypeFilter ||
+    hasExpandedFilters
 
   const expandedFilterCount = [
     filters.token,
@@ -370,10 +407,26 @@ export function CommonLogsFilterBar<TData>(
   )
   const modelFilter = (
     <LogsFilterField>
-      <LogsFilterInput
+      <Combobox
+        options={optionLists.models}
+        aria-label={t('Model Name')}
         placeholder={t('Model Name')}
+        className='h-8 min-w-0 text-sm leading-5'
         value={filters.model || ''}
-        onChange={(e) => handleChange('model', e.target.value)}
+        onValueChange={(value) => handleChange('model', value ?? '')}
+        onKeyDown={handleKeyDown}
+      />
+    </LogsFilterField>
+  )
+  const tagFilter = (
+    <LogsFilterField>
+      <Combobox
+        options={optionLists.tags}
+        aria-label={t('Tag')}
+        placeholder={t('Tag')}
+        className='h-8 min-w-0 text-sm leading-5'
+        value={filters.tag || ''}
+        onValueChange={(value) => handleChange('tag', value ?? '')}
         onKeyDown={handleKeyDown}
       />
     </LogsFilterField>
@@ -469,32 +522,41 @@ export function CommonLogsFilterBar<TData>(
   )
   const advancedFilters = (
     <>
-      <LogsFilterField>
-        <LogsFilterInput
+      <LogsFilterField className={sensitiveInputClass}>
+        <Combobox
+          options={optionLists.tokens}
+          aria-label={t('Token Name')}
           placeholder={t('Token Name')}
-          className={sensitiveInputClass}
+          className='h-8 min-w-0 text-sm leading-5'
+          popupClassName={sensitiveInputClass}
           value={filters.token || ''}
-          onChange={(e) => handleChange('token', e.target.value)}
+          onValueChange={(value) => handleChange('token', value ?? '')}
           onKeyDown={handleKeyDown}
         />
       </LogsFilterField>
       {isAdmin && (
-        <LogsFilterField>
-          <LogsFilterInput
+        <LogsFilterField className={sensitiveInputClass}>
+          <Combobox
+            options={optionLists.users}
+            aria-label={t('Username')}
             placeholder={t('Username')}
-            className={sensitiveInputClass}
+            className='h-8 min-w-0 text-sm leading-5'
+            popupClassName={sensitiveInputClass}
             value={filters.username || ''}
-            onChange={(e) => handleChange('username', e.target.value)}
+            onValueChange={(value) => handleChange('username', value ?? '')}
             onKeyDown={handleKeyDown}
           />
         </LogsFilterField>
       )}
       {isAdmin && (
         <LogsFilterField>
-          <LogsFilterInput
+          <Combobox
+            options={optionLists.channels}
+            aria-label={t('Channel ID')}
             placeholder={t('Channel ID')}
+            className='h-8 min-w-0 text-sm leading-5'
             value={filters.channel || ''}
-            onChange={(e) => handleChange('channel', e.target.value)}
+            onValueChange={(value) => handleChange('channel', value ?? '')}
             onKeyDown={handleKeyDown}
           />
         </LogsFilterField>
@@ -534,6 +596,7 @@ export function CommonLogsFilterBar<TData>(
         <>
           {dateRangeFilter}
           {modelFilter}
+          {tagFilter}
           {groupFilter}
           {typeFilter}
         </>
@@ -543,14 +606,16 @@ export function CommonLogsFilterBar<TData>(
       mobileFilters={
         <>
           {modelFilter}
+          {tagFilter}
           {groupFilter}
           {typeFilter}
           {advancedFilters}
         </>
       }
       mobileFilterCount={
-        [filters.model, filters.group, hasTypeFilter].filter(Boolean).length +
-        expandedFilterCount
+        [filters.model, filters.tag, filters.group, hasTypeFilter].filter(
+          Boolean
+        ).length + expandedFilterCount
       }
       hasAdvancedActiveFilters={hasExpandedFilters}
       advancedFilterCount={expandedFilterCount}

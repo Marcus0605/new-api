@@ -79,12 +79,28 @@ async function renderMobileFilter() {
     ...original(query),
     matches: query === '(max-width: 640px)',
   }))
-  vi.spyOn(api, 'get').mockImplementation(async (url) => ({
-    data: {
-      success: true,
-      data: url === '/api/user/self/groups' ? {} : { quota: 0, rpm: 0, tpm: 0 },
-    },
-  }))
+  vi.spyOn(api, 'get').mockImplementation(async (url) => {
+    if (url === '/api/user/self/groups') {
+      return { data: { success: true, data: {} } }
+    }
+    if (url === '/api/log/self/filter-options') {
+      return {
+        data: {
+          success: true,
+          data: {
+            models: ['gemini-3.7-flash'],
+            tokens: [],
+            users: [],
+            channels: [],
+            tags: [],
+          },
+        },
+      }
+    }
+    return {
+      data: { success: true, data: { quota: 0, rpm: 0, tpm: 0 } },
+    }
+  })
   const root = createRootRoute()
   const auth = createRoute({ getParentRoute: () => root, id: '_authenticated' })
   const logs = createRoute({
@@ -153,10 +169,14 @@ it('applies mobile drawer filters only when Search is pressed', async () => {
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name: 'Filter' }))
   const dialog = await screen.findByRole('dialog', { name: 'Filter' })
-  await user.type(
-    within(dialog).getByPlaceholderText('Model Name'),
-    'gemini-3.7-flash'
+  const modelInput = within(dialog).getByRole('combobox', {
+    name: 'Model Name',
+  })
+  await user.click(modelInput)
+  await user.click(
+    await screen.findByRole('option', { name: 'gemini-3.7-flash' })
   )
+  expect(modelInput).toHaveValue('gemini-3.7-flash')
   expect(router.state.location.search).not.toHaveProperty('model')
   await user.click(within(dialog).getByRole('button', { name: 'Search' }))
   await waitFor(() =>
@@ -224,9 +244,7 @@ it('keeps all quick actions visible without opening a menu', async () => {
   expect(screen.getByRole('button', { name: 'Show' })).toBeVisible()
   screen.getByRole('button', { name: 'Show' }).focus()
   await user.tab()
-  expect(
-    screen.getByRole('combobox', { name: 'Auto Refresh' })
-  ).toHaveFocus()
+  expect(screen.getByRole('combobox', { name: 'Auto Refresh' })).toHaveFocus()
   for (const name of ['Filter', 'Search', 'Export', 'View']) {
     await user.tab()
     expect(screen.getByRole('button', { name })).toHaveFocus()

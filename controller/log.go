@@ -26,6 +26,7 @@ func logFilterFromQuery(c *gin.Context, admin bool) model.LogFilter {
 		ModelName:         c.Query("model_name"),
 		TokenName:         c.Query("token_name"),
 		Group:             c.Query("group"),
+		Tag:               c.Query("tag"),
 		RequestId:         c.Query("request_id"),
 		UpstreamRequestId: c.Query("upstream_request_id"),
 	}
@@ -52,6 +53,24 @@ func limitLogTimeRange(startTimestamp int64, endTimestamp int64) (int64, error) 
 		return 0, common.NewMessage("The time range cannot exceed {{days}} days", map[string]any{"days": maxRange / (24 * 60 * 60)})
 	}
 	return startTimestamp, nil
+}
+
+func GetLogFilterOptions(c *gin.Context) {
+	options, err := model.GetLogFilterOptions(0, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, options)
+}
+
+func GetUserLogFilterOptions(c *gin.Context) {
+	options, err := model.GetLogFilterOptions(c.GetInt("id"), false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, options)
 }
 
 func GetAllLogs(c *gin.Context) {
@@ -210,7 +229,7 @@ func GetLogsStat(c *gin.Context) {
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
 	tokenID, _ := strconv.Atoi(c.Query("token_id"))
-	stat, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, tokenID)
+	stat, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, tokenID, c.Query("tag"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -263,7 +282,7 @@ func GetLogsSelfStat(c *gin.Context) {
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
 	tokenID, _ := strconv.Atoi(c.Query("token_id"))
-	quotaNum, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, tokenID)
+	quotaNum, err := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group, tokenID, c.Query("tag"))
 	if err != nil {
 		common.ApiError(c, err)
 		return

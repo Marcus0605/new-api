@@ -29,6 +29,7 @@ import type {
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
+  LogFilterOptions,
   TaskArtifactsResponse,
   UserInfo,
 } from './types'
@@ -73,6 +74,18 @@ async function fetchLogStats<T>(
 // ============================================================================
 // Common Log APIs
 // ============================================================================
+
+export async function getLogFilterOptions(isAdmin: boolean): Promise<{
+  success: boolean
+  message?: string
+  data?: LogFilterOptions
+}> {
+  const path = isAdmin
+    ? '/api/log/filter-options'
+    : '/api/log/self/filter-options'
+  const res = await api.get(path)
+  return res.data
+}
 
 export const getAllLogs = (params: GetLogsParams = {}) =>
   fetchLogs('/api/log', params, true)

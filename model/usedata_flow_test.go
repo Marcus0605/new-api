@@ -183,14 +183,14 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	require.Len(t, selfRows, 1)
 	require.Equal(t, 27, selfRows[0].TokenUsed)
 
-	stat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 11)
+	stat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 11, "")
 	require.NoError(t, err)
 	require.Equal(t, int64(10), stat.PromptTokens)
 	require.Equal(t, int64(5), stat.CompletionTokens)
 	require.Equal(t, []ModelStat{{ModelName: "gpt-a", PromptTokens: 10, CompletionTokens: 5, FailedCount: 1}}, stat.Models)
 	require.Equal(t, []TokenStat{{TokenID: 11, TokenName: "shared", PromptTokens: 10, CompletionTokens: 5, FailedCount: 1}}, stat.Tokens)
 
-	allStat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 0)
+	allStat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 0, "")
 	require.NoError(t, err)
 	require.Len(t, allStat.Models, 2)
 	modelStats := make(map[string]ModelStat, len(allStat.Models))
@@ -228,6 +228,63 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	require.Len(t, selfFlowRows, 1)
 	require.Equal(t, 22, selfFlowRows[0].TokenID)
 	require.Equal(t, 27, selfFlowRows[0].TokenUsed)
+}
+
+func TestLogTagFilterAndOptions(t *testing.T) {
+	truncateTables(t)
+	require.NoError(t, DB.Create(&[]Model{
+		{ModelName: "gpt-exact", Tags: "coding, fast"},
+		{ModelName: "claude", NameRule: NameRulePrefix, Tags: "coding"},
+		{ModelName: "gpt-other", Tags: "other"},
+	}).Error)
+	require.NoError(t, DB.Create(&[]Channel{{Id: 3, Name: "east"}, {Id: 4, Name: "west"}}).Error)
+	require.NoError(t, DB.Create(&[]Log{
+		{UserId: 1, Username: "alice", TokenName: "alpha", ModelName: "gpt-exact", Type: LogTypeConsume, PromptTokens: 10, CompletionTokens: 2},
+		{UserId: 1, Username: "alice", TokenName: "alpha", ModelName: "claude-3", Type: LogTypeConsume, PromptTokens: 20, CompletionTokens: 3},
+		{UserId: 2, Username: "bob", TokenName: "beta", ModelName: "gpt-exact", Type: LogTypeConsume, PromptTokens: 40, CompletionTokens: 5},
+		{UserId: 2, Username: "bob", TokenName: "beta", ModelName: "gpt-other", Type: LogTypeConsume, PromptTokens: 80, CompletionTokens: 7},
+	}).Error)
+
+	logs, total, err := GetAllLogs(LogFilter{Tag: "coding"}, 0, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), total)
+	require.Len(t, logs, 3)
+
+	logs, total, err = GetAllLogs(LogFilter{Tag: "coding", ModelName: "gpt-exact"}, 0, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	require.Len(t, logs, 2)
+	for _, log := range logs {
+		require.Equal(t, "gpt-exact", log.ModelName)
+	}
+
+	_, total, err = GetUserLogs(1, LogFilter{Tag: "coding"}, 0, 20)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), total)
+	_, total, err = GetAllLogs(LogFilter{Tag: "missing"}, 0, 20)
+	require.NoError(t, err)
+	require.Zero(t, total)
+
+	stat, err := SumUsedQuota(LogTypeConsume, 0, 0, "", "alice", "", 0, "", 0, "coding")
+	require.NoError(t, err)
+	require.Equal(t, int64(30), stat.PromptTokens)
+	require.Equal(t, int64(5), stat.CompletionTokens)
+
+	adminOptions, err := GetLogFilterOptions(0, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-3", "gpt-exact", "gpt-other"}, adminOptions.Models)
+	require.Equal(t, []string{"alpha", "beta"}, adminOptions.Tokens)
+	require.Equal(t, []string{"alice", "bob"}, adminOptions.Users)
+	require.Equal(t, []LogChannelOption{{ID: 3, Name: "east"}, {ID: 4, Name: "west"}}, adminOptions.Channels)
+	require.Equal(t, []string{"coding", "fast", "other"}, adminOptions.Tags)
+
+	userOptions, err := GetLogFilterOptions(1, false)
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-3", "gpt-exact"}, userOptions.Models)
+	require.Equal(t, []string{"alpha"}, userOptions.Tokens)
+	require.Empty(t, userOptions.Users)
+	require.Empty(t, userOptions.Channels)
+	require.Equal(t, adminOptions.Tags, userOptions.Tags)
 }
 
 func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {

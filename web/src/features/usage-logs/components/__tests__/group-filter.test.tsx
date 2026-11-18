@@ -41,6 +41,17 @@ import { useAuthStore } from '@/stores/auth-store'
 import { CommonLogsFilterBar } from '../common-logs-filter-bar'
 import { UsageLogsProvider } from '../usage-logs-provider'
 
+const filterOptions = {
+  models: ['gpt-4o', 'gemini-3.7-flash'],
+  tokens: ['cli', 'web'],
+  users: ['alice', 'bob'],
+  channels: [
+    { id: 3, name: 'East' },
+    { id: 4, name: 'West' },
+  ],
+  tags: ['coding', 'fast'],
+}
+
 const pointerCaptureDescriptor = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
   'setPointerCapture'
@@ -75,6 +86,12 @@ async function renderFilter(
           data: url === '/api/group/' ? Object.keys(groups) : groups,
         },
       }
+    }
+    if (
+      url === '/api/log/filter-options' ||
+      url === '/api/log/self/filter-options'
+    ) {
+      return { data: { success: true, data: filterOptions } }
     }
     return { data: { success: true, data: { quota: 0, rpm: 0, tpm: 0 } } }
   })
@@ -152,6 +169,40 @@ it('loads all groups in the administrator view', async () => {
   expect(await screen.findByRole('option', { name: 'premium' })).toBeVisible()
   expect(api.get).toHaveBeenCalledWith('/api/group/')
   expect(api.get).not.toHaveBeenCalledWith('/api/user/self/groups')
+})
+
+it('searches and submits model, tag, token, user, and channel options together', async () => {
+  useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 10 })
+  const router = await renderFilter()
+  const user = userEvent.setup()
+  const selections = [
+    ['Model Name', 'gpt', 'gpt-4o'],
+    ['Tag', 'cod', 'coding'],
+    ['Token Name', 'cli', 'cli'],
+    ['Username', 'ali', 'alice'],
+    ['Channel ID', '3', 'East (#3)'],
+  ] as const
+  for (const [label, query, option] of selections) {
+    const input = screen.getByRole('combobox', { name: label })
+    await user.click(input)
+    await user.type(input, query)
+    await user.click(await screen.findByRole('option', { name: option }))
+    expect(input).toHaveValue(option)
+  }
+  expect(router.state.location.search).not.toHaveProperty('model')
+  expect(router.state.location.search).not.toHaveProperty('tag')
+  await user.click(screen.getByRole('button', { name: 'Search' }))
+  await waitFor(() =>
+    expect(router.state.location.search).toMatchObject({
+      model: 'gpt-4o',
+      tag: 'coding',
+      token: 'cli',
+      username: 'alice',
+      channel: '3',
+      page: 1,
+    })
+  )
+  expect(api.get).toHaveBeenCalledWith('/api/log/filter-options')
 })
 
 it('confirms a keyboard choice before Enter submits the selected group', async () => {

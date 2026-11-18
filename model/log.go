@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
@@ -477,6 +478,48 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
+type LogChannelOption struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+type LogFilterOptions struct {
+	Models   []string           `json:"models"`
+	Tokens   []string           `json:"tokens"`
+	Users    []string           `json:"users"`
+	Channels []LogChannelOption `json:"channels"`
+	Tags     []string           `json:"tags"`
+}
+
+func GetLogFilterOptions(userID int, admin bool) (options LogFilterOptions, err error) {
+	options.Models = make([]string, 0)
+	options.Tokens = make([]string, 0)
+	options.Users = make([]string, 0)
+	options.Channels = make([]LogChannelOption, 0)
+	options.Tags = make([]string, 0)
+
+	tx := LOG_DB.Model(&Log{})
+	if !admin {
+		tx = tx.Where("logs.user_id = ?", userID)
+	}
+	if err = tx.Session(&gorm.Session{}).Where("logs.model_name <> ?", "").Distinct().Order("logs.model_name").Pluck("logs.model_name", &options.Models).Error; err != nil {
+		return options, err
+	}
+	if err = tx.Session(&gorm.Session{}).Where("logs.token_name <> ?", "").Distinct().Order("logs.token_name").Pluck("logs.token_name", &options.Tokens).Error; err != nil {
+		return options, err
+	}
+	if admin {
+		if err = tx.Session(&gorm.Session{}).Where("logs.username <> ?", "").Distinct().Order("logs.username").Pluck("logs.username", &options.Users).Error; err != nil {
+			return options, err
+		}
+		if err = DB.Table("channels").Select("id, name").Order("id").Scan(&options.Channels).Error; err != nil {
+			return options, err
+		}
+	}
+	options.Tags, err = GetAllModelTags()
+	return options, err
+}
+
 // LogFilter is the usage-log search shared by the log list and the log export.
 // Username and Channel are administrator filters.
 type LogFilter struct {
@@ -489,12 +532,69 @@ type LogFilter struct {
 	TokenID           int
 	Channel           int
 	Group             string
+	Tag               string
 	RequestId         string
 	UpstreamRequestId string
+	tagModelNames     []string
+	tagResolved       bool
+}
+
+func (f *LogFilter) resolveTagModelNames() error {
+	if f.Tag == "" || f.tagResolved {
+		return nil
+	}
+	tag := strings.TrimSpace(f.Tag)
+	if tag == "" {
+		f.Tag = ""
+		return nil
+	}
+	var metadata []Model
+	if err := DB.Select("model_name", "name_rule", "tags").Find(&metadata).Error; err != nil {
+		return err
+	}
+	var names []string
+	if err := LOG_DB.Model(&Log{}).Where("logs.model_name <> ?", "").Distinct().Pluck("logs.model_name", &names).Error; err != nil {
+		return err
+	}
+	matched := make(map[string]struct{})
+	for i := range metadata {
+		hasTag := false
+		for _, candidate := range splitModelTags(metadata[i].Tags) {
+			if candidate == tag {
+				hasTag = true
+				break
+			}
+		}
+		if !hasTag {
+			continue
+		}
+		for _, name := range names {
+			if metadata[i].MatchesName(name) {
+				matched[name] = struct{}{}
+			}
+		}
+	}
+	f.tagModelNames = make([]string, 0, len(matched))
+	for name := range matched {
+		f.tagModelNames = append(f.tagModelNames, name)
+	}
+	sort.Strings(f.tagModelNames)
+	f.tagResolved = true
+	return nil
 }
 
 func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
 	var err error
+	if err = f.resolveTagModelNames(); err != nil {
+		return nil, err
+	}
+	if f.Tag != "" {
+		if len(f.tagModelNames) == 0 {
+			tx = tx.Where("1 = 0")
+		} else {
+			tx = tx.Where("logs.model_name IN ?", f.tagModelNames)
+		}
+	}
 	if f.Type != LogTypeUnknown {
 		tx = tx.Where("logs.type = ?", f.Type)
 	}
@@ -715,7 +815,7 @@ type Stat struct {
 	Tokens           []TokenStat `json:"tokens" gorm:"-"`
 }
 
-func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, tokenID int) (stat Stat, err error) {
+func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, tokenID int, tag string) (stat Stat, err error) {
 	filter := LogFilter{
 		Type:           LogTypeConsume,
 		StartTimestamp: startTimestamp,
@@ -726,6 +826,10 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 		TokenID:        tokenID,
 		Channel:        channel,
 		Group:          group,
+		Tag:            tag,
+	}
+	if err = filter.resolveTagModelNames(); err != nil {
+		return stat, err
 	}
 	tx, err := filter.apply(LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota, COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(completion_tokens), 0) completion_tokens, count(*) request_count, COALESCE(sum(use_time), 0) total_use_time"))
 	if err != nil {

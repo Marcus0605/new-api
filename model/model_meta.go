@@ -32,6 +32,35 @@ type BoundChannel struct {
 	Type int    `json:"type"`
 }
 
+func splitModelTags(value string) []string {
+	var tags []string
+	for tag := range strings.SplitSeq(value, ",") {
+		if tag = strings.TrimSpace(tag); tag != "" {
+			tags = append(tags, tag)
+		}
+	}
+	return tags
+}
+
+func GetAllModelTags() ([]string, error) {
+	var rows []string
+	if err := DB.Model(&Model{}).Where("tags <> ?", "").Pluck("tags", &rows).Error; err != nil {
+		return nil, err
+	}
+	tagSet := make(map[string]struct{})
+	for _, row := range rows {
+		for _, tag := range splitModelTags(row) {
+			tagSet[tag] = struct{}{}
+		}
+	}
+	tags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	return tags, nil
+}
+
 type Model struct {
 	Id                 int            `json:"id"`
 	ModelName          string         `json:"model_name" gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`

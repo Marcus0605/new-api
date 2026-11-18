@@ -53,6 +53,7 @@ export interface CommonLogFilters extends CommonFilters {
   model?: string
   token?: string
   group?: string
+  tag?: string
   username?: string
   requestId?: string
   upstreamRequestId?: string
@@ -517,6 +518,19 @@ export interface TaskArtifactsResponse {
 // Common Log Types
 // ============================================================================
 
+export interface LogChannelFilterOption {
+  id: number
+  name: string
+}
+
+export interface LogFilterOptions {
+  models: string[]
+  tokens: string[]
+  users: string[]
+  channels: LogChannelFilterOption[]
+  tags: string[]
+}
+
 export interface GetLogsParams {
   p?: number
   page_size?: number
@@ -528,6 +542,7 @@ export interface GetLogsParams {
   end_timestamp?: number
   channel?: number
   group?: string
+  tag?: string
   request_id?: string
   upstream_request_id?: string
 }
@@ -552,6 +567,7 @@ export interface GetLogStatsParams {
   end_timestamp?: number
   channel?: number
   group?: string
+  tag?: string
   request_id?: string
   upstream_request_id?: string
 }
