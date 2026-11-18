@@ -36,7 +36,7 @@ import { ErrorState } from '@/components/error-state'
 import { JsonEditor } from '@/components/json-editor'
 import { LoadingState } from '@/components/loading-state'
 import { LobeIconField } from '@/components/lobe-icon-field'
-import { TagInput } from '@/components/tag-input'
+import { MultiSelect } from '@/components/multi-select'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Combobox } from '@/components/ui/combobox'
@@ -70,7 +70,13 @@ import {
   getServerErrorMessage,
 } from '@/lib/server-error-message'
 
-import { createModel, updateModel, getModel, getVendors } from '../../api'
+import {
+  createModel,
+  updateModel,
+  getModel,
+  getModelTags,
+  getVendors,
+} from '../../api'
 import { getNameRuleOptions, ENDPOINT_TEMPLATES } from '../../constants'
 import { modelsQueryKeys, vendorsQueryKeys } from '../../lib'
 import {
@@ -125,6 +131,14 @@ export function ModelMutateDrawer(props: {
     enabled: props.open,
   })
   const vendors = vendorsQuery.data?.data?.items ?? []
+  const tagsQuery = useQuery({
+    queryKey: ['model-tags'],
+    queryFn: async () => requireServerSuccess(await getModelTags()),
+    enabled: props.open,
+  })
+  const availableTags = Array.isArray(tagsQuery.data?.data)
+    ? tagsQuery.data.data
+    : []
   const selectedVendor = vendors.find(
     (vendor) => vendor.id === form.watch('vendor_id')
   )
@@ -211,6 +225,7 @@ export function ModelMutateDrawer(props: {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: modelsQueryKeys.all }),
         queryClient.invalidateQueries({ queryKey: ['pricing'] }),
+        queryClient.invalidateQueries({ queryKey: ['model-tags'] }),
         queryClient.invalidateQueries({ queryKey: vendorsQueryKeys.all }),
       ])
       toast.success(t('Model metadata saved'))
@@ -414,14 +429,21 @@ export function ModelMutateDrawer(props: {
                           <FormItem>
                             <FormLabel>{t('Tags')}</FormLabel>
                             <FormControl>
-                              <TagInput
-                                value={field.value || []}
+                              <MultiSelect
+                                options={availableTags.map((tag) => ({
+                                  label: tag,
+                                  value: tag,
+                                }))}
+                                selected={field.value || []}
                                 onChange={field.onChange}
                                 placeholder={t('Add tags...')}
+                                allowCreate
                               />
                             </FormControl>
                             <FormDescription>
-                              {t('Press Enter or comma to add tags')}
+                              {t(
+                                'Select existing tags or press Enter to create a new one'
+                              )}
                             </FormDescription>
                             <FormMessage />
                           </FormItem>

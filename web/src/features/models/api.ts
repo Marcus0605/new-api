@@ -42,6 +42,15 @@ import type {
 // Model CRUD Operations
 // ============================================================================
 
+export async function getModelTags(): Promise<{
+  success: boolean
+  message?: string
+  data?: string[]
+}> {
+  const res = await api.get('/api/models/tags')
+  return res.data
+}
+
 /**
  * Get paginated list of models
  */

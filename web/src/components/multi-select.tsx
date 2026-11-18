@@ -274,6 +274,7 @@ export function MultiSelect(props: MultiSelectProps) {
   )
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return
     // Enter without a highlighted option commits the typed value.
     if (event.key === 'Enter' && props.allowCreate && canCreate) {
       // Only fire when Base UI has no highlighted item to select. We rely on

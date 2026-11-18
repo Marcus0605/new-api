@@ -12,6 +12,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func GetModelTags(c *gin.Context) {
+	tags, err := model.GetAllModelTags()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, tags)
+}
+
 // GetAllModelsMeta 获取模型列表（分页）
 func GetAllModelsMeta(c *gin.Context) {
 	listModelsMeta(c, "", "")

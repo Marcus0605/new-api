@@ -293,6 +293,54 @@ describe('model pricing entry', () => {
 })
 
 describe('metadata editing', () => {
+  it('selects existing tags and saves a manually created tag', async () => {
+    const get = vi.spyOn(api, 'get').mockImplementation(async (url) => {
+      if (url === '/api/models/7') {
+        return { data: { success: true, data: model } }
+      }
+      if (url === '/api/vendors/') {
+        return { data: { success: true, data: { items: [] } } }
+      }
+      if (url === '/api/models/tags') {
+        return { data: { success: true, data: ['coding', 'fast'] } }
+      }
+      throw new Error(`Unexpected GET ${url}`)
+    })
+    const put = vi.spyOn(api, 'put').mockResolvedValue({
+      data: { success: true, data: model },
+    })
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    render(
+      <QueryClientProvider client={client}>
+        <ModelMutateDrawer open onOpenChange={() => {}} currentRow={model} />
+      </QueryClientProvider>
+    )
+    const user = userEvent.setup()
+    await waitFor(() =>
+      expect(screen.getByLabelText('Description')).toHaveValue('Original')
+    )
+    const input = screen.getByRole('combobox', { name: 'Add tags...' })
+    await user.click(input)
+    await user.click(await screen.findByRole('option', { name: 'coding' }))
+    await user.type(input, 'brand-new')
+    await user.keyboard('{Enter}')
+    await user.click(screen.getByRole('button', { name: 'Save metadata' }))
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith(
+        '/api/models/',
+        expect.objectContaining({ tags: 'coding,brand-new' }),
+        { skipBusinessError: true, skipErrorHandler: true }
+      )
+    )
+    expect(get).toHaveBeenCalledWith('/api/models/tags')
+    client.clear()
+  })
+
   it.each([
     {
       name: 'business rejection',
@@ -397,6 +445,9 @@ describe('metadata editing', () => {
               },
             },
           }
+        }
+        if (url === '/api/models/tags') {
+          return { data: { success: true, data: [] } }
         }
         throw new Error(`Unexpected GET ${url}`)
       })

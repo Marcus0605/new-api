@@ -5968,6 +5968,7 @@
     "Select default range": "デフォルト範囲を選択",
     "Select display mode": "表示モードを選択",
     "Select end time": "終了時間を選択",
+    "Select existing tags or press Enter to create a new one": "既存のタグを選択するか、Enter キーで新しいタグを作成します",
     "Select from presets or type custom identifier.": "プリセットから選択するか、カスタム識別子を入力してください。",
     "Select granularity": "粒度を選択",
     "Select groups": "グループを選択",

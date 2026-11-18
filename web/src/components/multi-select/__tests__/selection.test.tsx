@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
@@ -142,6 +142,18 @@ describe('multi-select batch paste', () => {
 
     expect(screen.getByLabelText('Selected values')).toBeEmptyDOMElement()
     expect(input).toHaveValue('a,b,c')
+  })
+
+  it('does not create a tag when Enter confirms an IME composition', async () => {
+    const user = userEvent.setup()
+    render(<Fixture />)
+    const input = screen.getByRole('combobox')
+
+    await user.click(input)
+    await user.type(input, 'new-tag')
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+
+    expect(screen.getByLabelText('Selected values')).toBeEmptyDOMElement()
   })
 
   it('does not add pasted values when the control is disabled', async () => {
