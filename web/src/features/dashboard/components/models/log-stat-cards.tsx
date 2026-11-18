@@ -31,6 +31,7 @@ import {
 import type {
   QuotaDataItem,
   DashboardFilters,
+  DashboardLogStats,
 } from '@/features/dashboard/types'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCompactNumber, formatNumber, formatPercent } from '@/lib/format'
@@ -40,7 +41,11 @@ import { useAuthStore } from '@/stores/auth-store'
 
 interface LogStatCardsProps {
   filters?: DashboardFilters
-  onDataUpdate?: (data: QuotaDataItem[], loading: boolean) => void
+  onDataUpdate?: (
+    data: QuotaDataItem[],
+    loading: boolean,
+    logStats?: DashboardLogStats
+  ) => void
 }
 
 const MAX_INLINE_STAT_CHARS = 7
@@ -98,7 +103,7 @@ export function LogStatCards(props: LogStatCardsProps) {
         if (abortController.signal.aborted) return
         const data = quotaResponse?.data || []
         setStats(calculateDashboardStats(data, logStatsResponse?.data))
-        onDataUpdate?.(data, false)
+        onDataUpdate?.(data, false, logStatsResponse?.data)
       })
       .catch(() => {
         if (abortController.signal.aborted) return

@@ -225,6 +225,7 @@ func GetLogsStat(c *gin.Context) {
 			"tpm":               stat.Tpm,
 			"prompt_tokens":     stat.PromptTokens,
 			"completion_tokens": stat.CompletionTokens,
+			"models":            stat.Models,
 		},
 	})
 	return
@@ -262,6 +263,7 @@ func GetLogsSelfStat(c *gin.Context) {
 			"tpm":               quotaNum.Tpm,
 			"prompt_tokens":     quotaNum.PromptTokens,
 			"completion_tokens": quotaNum.CompletionTokens,
+			"models":            quotaNum.Models,
 			//"token": tokenNum,
 		},
 	})

@@ -153,6 +153,11 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 		ModelName: "gpt-a", CreatedAt: 1000, Type: LogTypeConsume,
 		PromptTokens: 20, CompletionTokens: 7,
 	}).Error)
+	require.NoError(t, DB.Create(&Log{
+		UserId: 1, Username: "alice", TokenId: 22, TokenName: "shared",
+		ModelName: "gpt-b", CreatedAt: 1000, Type: LogTypeConsume,
+		PromptTokens: 4, CompletionTokens: 3,
+	}).Error)
 
 	allRows, err := GetAllQuotaDates(900, 2000, "", 11)
 	require.NoError(t, err)
@@ -168,6 +173,17 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(10), stat.PromptTokens)
 	require.Equal(t, int64(5), stat.CompletionTokens)
+	require.Equal(t, []ModelStat{{ModelName: "gpt-a", PromptTokens: 10, CompletionTokens: 5}}, stat.Models)
+
+	allStat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 0)
+	require.NoError(t, err)
+	require.Len(t, allStat.Models, 2)
+	modelStats := make(map[string]ModelStat, len(allStat.Models))
+	for _, modelStat := range allStat.Models {
+		modelStats[modelStat.ModelName] = modelStat
+	}
+	require.Equal(t, ModelStat{ModelName: "gpt-a", PromptTokens: 30, CompletionTokens: 12}, modelStats["gpt-a"])
+	require.Equal(t, ModelStat{ModelName: "gpt-b", PromptTokens: 4, CompletionTokens: 3}, modelStats["gpt-b"])
 
 	rootRows, err := GetFlowQuotaData(900, 2000, "", 0, common.RoleRootUser, 11)
 	require.NoError(t, err)

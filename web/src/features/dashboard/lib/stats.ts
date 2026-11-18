@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type {
   DashboardLogStats,
+  DashboardModelUsage,
   QuotaDataItem,
 } from '@/features/dashboard/types'
 
@@ -30,9 +31,67 @@ export function safeDivide(
   precision: number = 3
 ): number {
   const result = value / divisor
-  if (isNaN(result) || !isFinite(result)) return 0
+  if (Number.isNaN(result) || !Number.isFinite(result)) return 0
   const factor = Math.pow(10, precision)
   return Math.round(result * factor) / factor
+}
+
+/**
+ * Aggregate request, token, and cache usage for each model.
+ */
+export function calculateModelUsageStats(
+  data: QuotaDataItem[],
+  logStats?: DashboardLogStats
+): DashboardModelUsage[] {
+  const rows = new Map<string, DashboardModelUsage>()
+
+  for (const item of data) {
+    const modelName = item.model_name || ''
+    const cacheRead = Number(item.cache_read_tokens) || 0
+    const current = rows.get(modelName) ?? {
+      modelName,
+      requestCount: 0,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cacheReadTokens: 0,
+      inputCacheHitRate: 0,
+    }
+    current.requestCount += Number(item.count) || 0
+    current.totalTokens += Number(item.token_used) || 0
+    current.cacheReadTokens += Number.isFinite(cacheRead)
+      ? Math.max(0, cacheRead)
+      : 0
+    rows.set(modelName, current)
+  }
+
+  for (const model of logStats?.models ?? []) {
+    const current = rows.get(model.model_name) ?? {
+      modelName: model.model_name,
+      requestCount: 0,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cacheReadTokens: 0,
+      inputCacheHitRate: 0,
+    }
+    current.promptTokens = Number(model.prompt_tokens) || 0
+    current.completionTokens = Number(model.completion_tokens) || 0
+    rows.set(model.model_name, current)
+  }
+
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      inputCacheHitRate:
+        safeDivide(row.cacheReadTokens, row.promptTokens) * 100,
+    }))
+    .sort(
+      (a, b) =>
+        b.totalTokens - a.totalTokens ||
+        b.requestCount - a.requestCount ||
+        a.modelName.localeCompare(b.modelName)
+    )
 }
 
 /**

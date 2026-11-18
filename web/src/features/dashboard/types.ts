@@ -35,9 +35,26 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface DashboardModelLogStats {
+  model_name: string
+  prompt_tokens?: number
+  completion_tokens?: number
+}
+
 export interface DashboardLogStats {
   prompt_tokens?: number
   completion_tokens?: number
+  models?: DashboardModelLogStats[]
+}
+
+export interface DashboardModelUsage {
+  modelName: string
+  requestCount: number
+  totalTokens: number
+  promptTokens: number
+  completionTokens: number
+  cacheReadTokens: number
+  inputCacheHitRate: number
 }
 
 export interface FlowQuotaDataItem {

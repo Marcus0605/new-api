@@ -54,6 +54,7 @@ import {
 import type {
   DashboardChartPreferences,
   DashboardFilters,
+  DashboardLogStats,
   QuotaDataItem,
   UserChartsFilters,
 } from './types'
@@ -82,6 +83,12 @@ const PERFORMANCE_MODEL_FALLBACK_KEYS = [
 const LazyLogStatCards = lazy(() =>
   import('./components/models/log-stat-cards').then((m) => ({
     default: m.LogStatCards,
+  }))
+)
+
+const LazyModelUsageTable = lazy(() =>
+  import('./components/models/model-usage-table').then((m) => ({
+    default: m.ModelUsageTable,
   }))
 )
 
@@ -139,6 +146,21 @@ function LogStatCardsFallback() {
       </div>
       <div className='border-t px-3 py-2'>
         <Skeleton className='h-4 w-full max-w-md' />
+      </div>
+    </div>
+  )
+}
+
+function ModelUsageTableFallback() {
+  return (
+    <div className='overflow-hidden rounded-lg border'>
+      <div className='border-b px-4 py-2.5'>
+        <Skeleton className='h-4 w-32' />
+      </div>
+      <div className='space-y-2 px-4 py-3'>
+        {Array.from({ length: 3 }, (_, index) => (
+          <Skeleton key={index} className='h-5 w-full' />
+        ))}
       </div>
     </div>
   )
@@ -205,6 +227,7 @@ export function Dashboard() {
     DASHBOARD_DEFAULT_SECTION) as DashboardSectionId
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
+  const [modelLogStats, setModelLogStats] = useState<DashboardLogStats>()
   const [dataLoading, setDataLoading] = useState(false)
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
@@ -232,8 +255,9 @@ export function Dashboard() {
   }, [chartPreferences])
 
   const handleDataUpdate = useCallback(
-    (data: QuotaDataItem[], loading: boolean) => {
+    (data: QuotaDataItem[], loading: boolean, logStats?: DashboardLogStats) => {
       setModelData(data)
+      setModelLogStats(logStats)
       setDataLoading(loading)
     },
     []
@@ -361,14 +385,23 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
+              <FadeIn delay={0.05}>
+                <Suspense fallback={<ModelUsageTableFallback />}>
+                  <LazyModelUsageTable
+                    data={modelData}
+                    logStats={modelLogStats}
+                    loading={dataLoading}
+                  />
+                </Suspense>
+              </FadeIn>
               {isAdmin && (
-                <FadeIn delay={0.05}>
+                <FadeIn delay={0.1}>
                   <Suspense fallback={<PerformanceOverviewFallback />}>
                     <LazyPerformanceOverview />
                   </Suspense>
                 </FadeIn>
               )}
-              <FadeIn delay={0.1}>
+              <FadeIn delay={0.15}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyConsumptionDistributionChart
                     data={modelData}
@@ -382,7 +415,7 @@ export function Dashboard() {
                   />
                 </Suspense>
               </FadeIn>
-              <FadeIn delay={0.15}>
+              <FadeIn delay={0.2}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyModelCharts
                     data={modelData}

@@ -486,6 +486,7 @@ type LogFilter struct {
 	ModelName         string
 	Username          string
 	TokenName         string
+	TokenID           int
 	Channel           int
 	Group             string
 	RequestId         string
@@ -505,6 +506,9 @@ func (f LogFilter) apply(tx *gorm.DB) (*gorm.DB, error) {
 	}
 	if f.TokenName != "" {
 		tx = tx.Where("logs.token_name = ?", f.TokenName)
+	}
+	if f.TokenID != 0 {
+		tx = tx.Where("logs.token_id = ?", f.TokenID)
 	}
 	if f.RequestId != "" {
 		tx = tx.Where("logs.request_id = ?", f.RequestId)
@@ -684,62 +688,49 @@ func streamLogs(tx *gorm.DB, order string, fn func(*Log) error) error {
 	return rows.Err()
 }
 
+type ModelStat struct {
+	ModelName        string `json:"model_name"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+}
+
 type Stat struct {
-	Quota            int   `json:"quota"`
-	Rpm              int   `json:"rpm"`
-	Tpm              int   `json:"tpm"`
-	PromptTokens     int64 `json:"prompt_tokens"`
-	CompletionTokens int64 `json:"completion_tokens"`
+	Quota            int         `json:"quota"`
+	Rpm              int         `json:"rpm"`
+	Tpm              int         `json:"tpm"`
+	PromptTokens     int64       `json:"prompt_tokens"`
+	CompletionTokens int64       `json:"completion_tokens"`
+	Models           []ModelStat `json:"models" gorm:"-"`
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, tokenID int) (stat Stat, err error) {
-	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota, COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(completion_tokens), 0) completion_tokens")
-
-	// 为rpm和tpm创建单独的查询
-	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
-
-	if tx, err = applyExplicitLogTextFilter(tx, "username", username); err != nil {
+	filter := LogFilter{
+		Type:           LogTypeConsume,
+		StartTimestamp: startTimestamp,
+		EndTimestamp:   endTimestamp,
+		ModelName:      modelName,
+		Username:       username,
+		TokenName:      tokenName,
+		TokenID:        tokenID,
+		Channel:        channel,
+		Group:          group,
+	}
+	tx, err := filter.apply(LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota, COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(completion_tokens), 0) completion_tokens"))
+	if err != nil {
 		return stat, err
 	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "username", username); err != nil {
+	rpmTpmQuery, err := filter.apply(LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm"))
+	if err != nil {
 		return stat, err
 	}
-	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
-		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
-	}
-	if tokenID != 0 {
-		tx = tx.Where("token_id = ?", tokenID)
-		rpmTpmQuery = rpmTpmQuery.Where("token_id = ?", tokenID)
-	}
-	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
-	}
-	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
-	}
-	if tx, err = applyExplicitLogTextFilter(tx, "model_name", modelName); err != nil {
+	modelQuery, err := filter.apply(LOG_DB.Table("logs").Select("logs.model_name, COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(completion_tokens), 0) completion_tokens"))
+	if err != nil {
 		return stat, err
 	}
-	if rpmTpmQuery, err = applyExplicitLogTextFilter(rpmTpmQuery, "model_name", modelName); err != nil {
-		return stat, err
-	}
-	if channel != 0 {
-		tx = tx.Where("channel_id = ?", channel)
-		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", channel)
-	}
-	if group != "" {
-		tx = tx.Where(logGroupCol+" = ?", group)
-		rpmTpmQuery = rpmTpmQuery.Where(logGroupCol+" = ?", group)
-	}
-
-	tx = tx.Where("type = ?", LogTypeConsume)
-	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
 
 	// 只统计最近60秒的rpm和tpm
 	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
 
-	// 执行查询
 	if err := tx.Scan(&stat).Error; err != nil {
 		common.SysError(common.LogText("failed to query log stat: %s", err.Error()))
 		return stat, common.NewMessage("Failed to query statistics")
@@ -754,6 +745,11 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	}
 	stat.Rpm = rateStat.Rpm
 	stat.Tpm = rateStat.Tpm
+	stat.Models = make([]ModelStat, 0)
+	if err := modelQuery.Group("logs.model_name").Scan(&stat.Models).Error; err != nil {
+		common.SysError(common.LogText("failed to query model log stats: %s", err.Error()))
+		return stat, common.NewMessage("Failed to query statistics")
+	}
 
 	return stat, nil
 }
