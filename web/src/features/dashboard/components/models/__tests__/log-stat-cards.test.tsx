@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getUserLogStats, getUserQuotaDates } from '@/features/dashboard/api'
 import { LogStatCards } from '@/features/dashboard/components/models/log-stat-cards'
@@ -29,6 +29,11 @@ vi.mock('@/features/dashboard/api', () => ({
 
 const mockedGetUserLogStats = vi.mocked(getUserLogStats)
 const mockedGetUserQuotaDates = vi.mocked(getUserQuotaDates)
+
+beforeEach(() => {
+  mockedGetUserQuotaDates.mockResolvedValue({ success: true, data: [] })
+  mockedGetUserLogStats.mockResolvedValue({ success: true, data: {} })
+})
 
 afterEach(() => {
   mockedGetUserLogStats.mockReset()
@@ -81,5 +86,21 @@ describe('client key statistic cards', () => {
     await waitFor(() => expect(requests).toHaveTextContent('2'))
     expect(models).toHaveTextContent('3')
     expect(keys).toHaveTextContent('3')
+  })
+
+  it('lays out client key cards in two rows of five', () => {
+    render(<LogStatCards variant='key' />)
+
+    const requests = screen.getByRole('group', { name: 'Total Requests' })
+    expect(requests.parentElement).toHaveClass('lg:grid-cols-5')
+    expect(requests.parentElement?.children).toHaveLength(10)
+  })
+
+  it('lays out model analytics cards in two rows of four', () => {
+    render(<LogStatCards />)
+
+    const requests = screen.getByRole('group', { name: 'Total Requests' })
+    expect(requests.parentElement).toHaveClass('lg:grid-cols-4')
+    expect(requests.parentElement?.children).toHaveLength(8)
   })
 })

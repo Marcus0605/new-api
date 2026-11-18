@@ -161,9 +161,7 @@ export function LogStatCards(props: LogStatCardsProps) {
       <div
         className={cn(
           'divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3',
-          props.variant === 'key'
-            ? 'lg:grid-cols-5 xl:grid-cols-10'
-            : 'lg:grid-cols-8'
+          props.variant === 'key' ? 'lg:grid-cols-5' : 'lg:grid-cols-4'
         )}
       >
         {items.map((it, idx) => {
