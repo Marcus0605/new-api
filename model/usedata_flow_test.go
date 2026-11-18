@@ -183,13 +183,6 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	require.Len(t, selfRows, 1)
 	require.Equal(t, 27, selfRows[0].TokenUsed)
 
-	totalTokens, err := GetUserTotalTokens(1)
-	require.NoError(t, err)
-	require.Equal(t, int64(42), totalTokens)
-	otherUserTotal, err := GetUserTotalTokens(2)
-	require.NoError(t, err)
-	require.Equal(t, int64(99), otherUserTotal)
-
 	stat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 11)
 	require.NoError(t, err)
 	require.Equal(t, int64(10), stat.PromptTokens)

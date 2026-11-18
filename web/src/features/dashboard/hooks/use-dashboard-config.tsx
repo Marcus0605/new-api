@@ -160,16 +160,16 @@ export function useSummaryCardsConfig(totals: {
     },
     {
       key: 'usage',
-      title: t('Historical Usage'),
+      title: t('Monthly Usage'),
       value: totals.usedDisplay,
       description: t('Total Tokens'),
       icon: TrendingUp,
     },
     {
       key: 'requests',
-      title: t('Request Count'),
+      title: t('Monthly Requests'),
       value: totals.requestCountDisplay,
-      description: t('Total requests made'),
+      description: t('Requests this month'),
       icon: Activity,
     },
   ]

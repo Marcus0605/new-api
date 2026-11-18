@@ -24,12 +24,13 @@ import { useTranslation } from 'react-i18next'
 
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
 import { Button } from '@/components/ui/button'
-import { getUserQuotaDates, getUserTotalTokens } from '@/features/dashboard/api'
+import { getUserQuotaDates } from '@/features/dashboard/api'
 import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { useStatus } from '@/hooks/use-status'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatNumber, formatQuota } from '@/lib/format'
+import dayjs from '@/lib/dayjs'
+import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -93,10 +94,12 @@ function buildSummarySparklines(
 
 function getSummarySparkline(
   key: string,
-  sparklineData: Record<SummarySparklineKey, number[]>
+  recentSparklines: Record<SummarySparklineKey, number[]>,
+  monthlySparklines: Record<SummarySparklineKey, number[]>
 ): number[] | undefined {
-  if (key === 'usage') return sparklineData.usage
-  if (key === 'requests') return sparklineData.requests
+  if (key === 'todayUsage') return recentSparklines.usage
+  if (key === 'usage') return monthlySparklines.usage
+  if (key === 'requests') return monthlySparklines.requests
   return undefined
 }
 
@@ -144,8 +147,14 @@ export function SummaryCards() {
   const { loading } = useStatus()
 
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
+  const monthTimeRange = useMemo(() => {
+    const now = dayjs()
+    return {
+      start_timestamp: now.startOf('month').unix(),
+      end_timestamp: now.unix(),
+    }
+  }, [])
   const remainQuota = Number(user?.quota ?? 0)
-  const requestCount = Number(user?.request_count ?? 0)
 
   const usageTrendQuery = useQuery({
     queryKey: [
@@ -165,21 +174,41 @@ export function SummaryCards() {
       ),
     staleTime: 60 * 1000,
   })
-  const totalTokensQuery = useQuery({
-    queryKey: ['dashboard', 'overview', 'total-tokens'],
-    queryFn: async () => requireServerSuccess(await getUserTotalTokens()),
+  const monthlyUsageQuery = useQuery({
+    queryKey: [
+      'dashboard',
+      'overview',
+      'monthly-summary',
+      monthTimeRange.start_timestamp,
+      monthTimeRange.end_timestamp,
+    ],
+    queryFn: async () =>
+      requireServerSuccess(
+        await getUserQuotaDates({
+          start_timestamp: monthTimeRange.start_timestamp,
+          end_timestamp: monthTimeRange.end_timestamp,
+          default_time: 'day',
+        })
+      ),
     staleTime: 60 * 1000,
   })
 
-  const summaryValues = useMemo(() => {
-    return {
-      usedDisplay: formatNumber(
-        totalTokensQuery.data?.data.total_tokens ?? 0,
-        locale
+  const monthlyTotals = useMemo(
+    () =>
+      (monthlyUsageQuery.data?.data ?? []).reduce(
+        (totals, item) => ({
+          tokens: totals.tokens + (Number(item.token_used) || 0),
+          requests: totals.requests + (Number(item.count) || 0),
+        }),
+        { tokens: 0, requests: 0 }
       ),
-      requestCountDisplay: formatNumber(requestCount, locale),
-    }
-  }, [locale, requestCount, totalTokensQuery.data?.data.total_tokens])
+    [monthlyUsageQuery.data?.data]
+  )
+
+  const summaryValues = {
+    usedDisplay: formatCompactNumber(monthlyTotals.tokens, locale),
+    requestCountDisplay: formatNumber(monthlyTotals.requests, locale),
+  }
 
   const sparklineData = useMemo(
     () =>
@@ -194,6 +223,22 @@ export function SummaryCards() {
       summaryTimeRange.end_timestamp,
       summaryTimeRange.start_timestamp,
       usageTrendQuery.data?.data,
+    ]
+  )
+
+  const monthlySparklineData = useMemo(
+    () =>
+      buildSummarySparklines(
+        monthlyUsageQuery.data?.data ?? [],
+        remainQuota,
+        monthTimeRange.start_timestamp,
+        monthTimeRange.end_timestamp
+      ),
+    [
+      remainQuota,
+      monthTimeRange.end_timestamp,
+      monthTimeRange.start_timestamp,
+      monthlyUsageQuery.data?.data,
     ]
   )
 
@@ -218,7 +263,7 @@ export function SummaryCards() {
   const healthCfg = HEALTH_CONFIG[healthLevel]
   const runwayDays = getRunwayDays(remainQuota, recentUsage)
 
-  const todayUsageDisplay = formatNumber(recentTokenUsage, locale)
+  const todayUsageDisplay = formatCompactNumber(recentTokenUsage, locale)
   let runwayDisplay: string
   if (runwayDays !== null) {
     if (runwayDays < 1) {
@@ -247,10 +292,11 @@ export function SummaryCards() {
       desc: config.description,
       icon: config.icon,
       tone: tones[index] ?? 'accent-3',
-      sparkline:
-        config.key === 'todayUsage'
-          ? sparklineData.usage
-          : getSummarySparkline(config.key, sparklineData),
+      sparkline: getSummarySparkline(
+        config.key,
+        sparklineData,
+        monthlySparklineData
+      ),
       sparklineVariant: 'line' as const,
     }
   })
@@ -319,7 +365,7 @@ export function SummaryCards() {
                   <span className='truncate'>{t('Last 24h usage')}</span>
                 </div>
                 <div className='text-foreground mt-1.5 truncate text-xs font-semibold tabular-nums'>
-                  {formatNumber(recentTokenUsage, locale)}
+                  {formatCompactNumber(recentTokenUsage, locale)}
                 </div>
               </div>
               <div className='bg-background/60 rounded-lg px-2.5 py-2'>

@@ -27,13 +27,18 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import dayjs from '@/lib/dayjs'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { SummaryCards } from '../summary-cards'
 
 let client: QueryClient
+let selfDataRequests: Array<Record<string, unknown>>
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 10, 18, 9))
+  selfDataRequests = []
   window.localStorage.clear()
   useAuthStore.getState().auth.setUser({
     id: 1,
@@ -46,11 +51,24 @@ beforeEach(() => {
   client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  vi.spyOn(api, 'get').mockImplementation(async (url) => {
+  vi.spyOn(api, 'get').mockImplementation(async (url, config) => {
     switch (url) {
       case '/api/status':
         return { data: { success: true, data: {} } }
-      case '/api/data/self':
+      case '/api/data/self': {
+        const params = (config?.params ?? {}) as Record<string, unknown>
+        selfDataRequests.push(params)
+        if (params.default_time === 'day') {
+          return {
+            data: {
+              success: true,
+              data: [
+                { created_at: 3000, token_used: 5000, count: 8 },
+                { created_at: 4000, token_used: 2500, count: 4 },
+              ],
+            },
+          }
+        }
         return {
           data: {
             success: true,
@@ -60,8 +78,7 @@ beforeEach(() => {
             ],
           },
         }
-      case '/api/data/self/total':
-        return { data: { success: true, data: { total_tokens: 9876 } } }
+      }
       default:
         throw new Error(`Unexpected summary request: ${url}`)
     }
@@ -72,11 +89,12 @@ afterEach(() => {
   cleanup()
   client.clear()
   vi.restoreAllMocks()
+  vi.useRealTimers()
   useAuthStore.setState(useAuthStore.getInitialState(), true)
   window.localStorage.clear()
 })
 
-it('shows recent and historical usage as total tokens instead of currency', async () => {
+it('shows compact recent tokens and aggregates usage and requests for the current month', async () => {
   const router = createRouter({
     routeTree: createRootRoute({ component: SummaryCards }),
     history: createMemoryHistory({ initialEntries: ['/'] }),
@@ -88,8 +106,16 @@ it('shows recent and historical usage as total tokens instead of currency', asyn
     </QueryClientProvider>
   )
 
-  expect(await screen.findAllByText('1,500')).toHaveLength(2)
-  expect(await screen.findByText('9,876')).toBeVisible()
+  expect(await screen.findAllByText('1.5K')).toHaveLength(2)
+  expect(await screen.findByText('7.5K')).toBeVisible()
+  expect(screen.getByText('12')).toBeVisible()
+  expect(screen.getByText('Monthly Usage')).toBeVisible()
+  expect(screen.getByText('Monthly Requests')).toBeVisible()
   expect(screen.getAllByText('Total Tokens')).toHaveLength(2)
   expect(screen.queryByText(/\(USD\)/)).not.toBeInTheDocument()
+  expect(selfDataRequests).toContainEqual({
+    start_timestamp: dayjs().startOf('month').unix(),
+    end_timestamp: dayjs().unix(),
+    default_time: 'day',
+  })
 })
