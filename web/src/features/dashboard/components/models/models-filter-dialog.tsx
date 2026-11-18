@@ -16,13 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQuery } from '@tanstack/react-query'
 import { Filter, RotateCcw, Calendar, Search } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DateTimePicker } from '@/components/datetime-picker'
 import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
+import { Combobox } from '@/components/ui/combobox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -46,6 +48,8 @@ import type {
   DashboardChartPreferences,
   DashboardFilters,
 } from '@/features/dashboard/types'
+import { getApiKeys } from '@/features/keys/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -110,6 +114,43 @@ export function ModelsFilter(props: ModelsFilterProps) {
   const [selectedRange, setSelectedRange] = useState<number | null>(() =>
     detectQuickRangeDays(props.currentFilters)
   )
+  const {
+    data: apiKeys = [],
+    isLoading: apiKeysLoading,
+    isError: apiKeysError,
+  } = useQuery({
+    queryKey: ['dashboard', 'api-key-options', user?.id],
+    queryFn: async () => {
+      const firstPage = requireServerSuccess(
+        await getApiKeys({ p: 1, size: 100 })
+      )
+      const items = [...(firstPage.data?.items ?? [])]
+      const total = firstPage.data?.total ?? items.length
+      const pageCount = Math.ceil(total / 100)
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
+          getApiKeys({ p: index + 2, size: 100 }).then(requireServerSuccess)
+        )
+      )
+      for (const page of remainingPages) {
+        items.push(...(page.data?.items ?? []))
+      }
+      return items
+    },
+    enabled: open && Boolean(user?.id),
+    staleTime: 60_000,
+  })
+  const apiKeyOptions = useMemo(
+    () => [
+      { value: '', label: t('All API tokens') },
+      ...apiKeys.map((apiKey) => ({
+        value: String(apiKey.id),
+        label: apiKey.name || `${t('API Key')} #${apiKey.id}`,
+        description: `sk-${apiKey.key}`,
+      })),
+    ],
+    [apiKeys, t]
+  )
 
   const handleOpenChange = (nextOpen: boolean) => {
     // Sync the editing state from the applied filters every time the dialog
@@ -147,11 +188,12 @@ export function ModelsFilter(props: ModelsFilterProps) {
 
   const handleChange = (
     field: keyof DashboardFilters,
-    value: Date | string | undefined
+    value: Date | string | number | undefined
   ) => {
     setFilters((prev) => ({ ...prev, [field]: value }))
-    if (field === 'start_timestamp' || field === 'end_timestamp')
+    if (field === 'start_timestamp' || field === 'end_timestamp') {
       setSelectedRange(null)
+    }
   }
 
   const handleQuickRange = (days: number) => {
@@ -257,12 +299,10 @@ export function ModelsFilter(props: ModelsFilterProps) {
           <div className='grid gap-2'>
             <Label htmlFor='time_granularity'>{t('Time Granularity')}</Label>
             <Select
-              items={[
-                ...TIME_GRANULARITY_OPTIONS.map((option) => ({
-                  value: option.value,
-                  label: t(option.label),
-                })),
-              ]}
+              items={TIME_GRANULARITY_OPTIONS.map((option) => ({
+                value: option.value,
+                label: t(option.label),
+              }))}
               value={filters.time_granularity}
               onValueChange={(value) =>
                 handleChange('time_granularity', value as TimeGranularity)
@@ -299,6 +339,29 @@ export function ModelsFilter(props: ModelsFilterProps) {
               </div>
             </>
           )}
+
+          <div className='grid gap-2'>
+            <Label htmlFor='token_id'>{t('API Key')}</Label>
+            <Combobox
+              id='token_id'
+              name='token_id'
+              options={apiKeyOptions}
+              value={filters.token_id ? String(filters.token_id) : ''}
+              onValueChange={(value) =>
+                handleChange('token_id', value ? Number(value) : undefined)
+              }
+              placeholder={t('Filter by API key...')}
+              emptyText={
+                apiKeysError
+                  ? t('Failed to load API keys')
+                  : t(
+                      'No API keys available. Create your first API key to get started.'
+                    )
+              }
+              disabled={apiKeysLoading}
+              className='w-full'
+            />
+          </div>
         </div>
       </ScrollArea>
     </Dialog>

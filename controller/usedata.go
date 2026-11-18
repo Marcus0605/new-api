@@ -32,7 +32,8 @@ func GetAllQuotaDates(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	username := c.Query("username")
-	dates, err := model.GetAllQuotaDates(startTimestamp, endTimestamp, username)
+	tokenID, _ := strconv.Atoi(c.Query("token_id"))
+	dates, err := model.GetAllQuotaDates(startTimestamp, endTimestamp, username, tokenID)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -69,7 +70,8 @@ func GetUserQuotaDates(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	dates, err := model.GetQuotaDataByUserId(userId, startTimestamp, endTimestamp)
+	tokenID, _ := strconv.Atoi(c.Query("token_id"))
+	dates, err := model.GetQuotaDataByUserId(userId, startTimestamp, endTimestamp, tokenID)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -88,7 +90,8 @@ func GetAllFlowQuotaDates(c *gin.Context) {
 		return
 	}
 	username := c.Query("username")
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, username, 0, c.GetInt("role"))
+	tokenID, _ := strconv.Atoi(c.Query("token_id"))
+	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, username, 0, c.GetInt("role"), tokenID)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -111,7 +114,8 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser)
+	tokenID, _ := strconv.Atoi(c.Query("token_id"))
+	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser, tokenID)
 	if err != nil {
 		common.ApiError(c, err)
 		return

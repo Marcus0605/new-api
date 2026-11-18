@@ -41,6 +41,7 @@ export async function getUserQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
+    token_id?: number
   },
   isAdmin = false
 ) {
@@ -58,6 +59,7 @@ export async function getUserLogStats(
     end_timestamp: number
     default_time?: string
     username?: string
+    token_id?: number
   },
   isAdmin = false
 ) {
@@ -90,6 +92,7 @@ export async function getFlowQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
+    token_id?: number
   },
   isAdmin = false
 ) {
