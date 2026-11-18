@@ -204,6 +204,20 @@ test('selecting search results adds only matching models and retains the manual 
   )
 })
 
+test('batch actions select every model and clear the entire selection', async () => {
+  const user = userEvent.setup()
+  render(<InlineSelection />)
+
+  await user.click(screen.getByRole('button', { name: 'Select all models' }))
+  expect(screen.getByLabelText('Selected models')).toHaveTextContent(
+    'manual-model,gpt-one,gpt-two,another-model'
+  )
+
+  await user.click(screen.getByRole('button', { name: 'Deselect all' }))
+  expect(screen.getByLabelText('Selected models')).toHaveTextContent('')
+  expect(screen.getByRole('button', { name: 'Deselect all' })).toBeDisabled()
+})
+
 test('the redirect action appears per model only when a handler is provided and reports the model without toggling it', async () => {
   const user = userEvent.setup()
   const onRedirect = vi.fn()

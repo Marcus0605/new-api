@@ -282,12 +282,12 @@ export function UpstreamModelSelection(props: UpstreamModelSelectionProps) {
         onChange={(event) => setSearch(event.target.value)}
       />
       {!showChanges && (
-        <div className='flex items-center justify-between gap-2'>
+        <div className='flex flex-wrap items-center justify-between gap-2'>
           <span className='text-muted-foreground text-xs'>
             {props.summaryText ??
               t('Fetched {{count}} models', { count: props.models.length })}
           </span>
-          {search.trim().length > 0 && (
+          <div className='flex flex-wrap gap-2'>
             <Button
               type='button'
               variant='outline'
@@ -299,9 +299,20 @@ export function UpstreamModelSelection(props: UpstreamModelSelectionProps) {
                 ])
               }
             >
-              {t('Select all matching models')}
+              {search.trim().length > 0
+                ? t('Select all matching models')
+                : t('Select all models')}
             </Button>
-          )}
+            <Button
+              type='button'
+              variant='outline'
+              size='sm'
+              disabled={!props.selected.length}
+              onClick={() => props.onChange([])}
+            >
+              {t('Deselect all')}
+            </Button>
+          </div>
         </div>
       )}
       {showChanges ? (
