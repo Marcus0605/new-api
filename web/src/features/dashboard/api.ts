@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { api } from '@/lib/api'
 
 import type {
+  DashboardLogStats,
   FlowQuotaDataItem,
   QuotaDataItem,
   UptimeGroupResult,
@@ -45,6 +46,23 @@ export async function getUserQuotaDates(
 ) {
   const endpoint = isAdmin ? '/api/data' : '/api/data/self'
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
+    endpoint,
+    { params }
+  )
+  return res.data
+}
+
+export async function getUserLogStats(
+  params: {
+    start_timestamp: number
+    end_timestamp: number
+    default_time?: string
+    username?: string
+  },
+  isAdmin = false
+) {
+  const endpoint = isAdmin ? '/api/log/stat' : '/api/log/self/stat'
+  const res = await api.get<{ success: boolean; data: DashboardLogStats }>(
     endpoint,
     { params }
   )

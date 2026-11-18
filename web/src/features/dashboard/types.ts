@@ -35,6 +35,11 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface DashboardLogStats {
+  prompt_tokens?: number
+  completion_tokens?: number
+}
+
 export interface FlowQuotaDataItem {
   user_id?: number
   username?: string
@@ -244,7 +249,7 @@ export interface ProcessedChartData {
   spec_area: VChartSpec
   spec_model_line: VChartSpec
   spec_rank_bar: VChartSpec
-  totalQuotaDisplay: string
+  totalTokenDisplay: string
   totalCountDisplay: string
 }
 

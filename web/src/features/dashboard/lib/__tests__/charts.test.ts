@@ -83,6 +83,7 @@ function unorderedUsage(start: string, interval: number): QuotaDataItem[] {
     model_name: 'model-a',
     username: 'alice',
     quota: (i + 1) * 500000,
+    token_used: (i + 1) * 1000,
     count: i + 1,
   }))
   // Same hour, or a second hourly record within the same day/week label.
@@ -90,6 +91,7 @@ function unorderedUsage(start: string, interval: number): QuotaDataItem[] {
     ...rows[0],
     created_at: first + (interval === 3600 ? 0 : 3600),
     quota: 5000000,
+    token_used: 10000,
     count: 10,
   }
   return [
@@ -112,12 +114,12 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
     const result = processChartData(data, scenario.granularity)
 
     for (const key of ['spec_line', 'spec_area', 'spec_model_line'] as const) {
-      const values: Array<{ Time: string; rawQuota: number; Count: number }> =
+      const values: Array<{ Time: string; rawTokens: number; Count: number }> =
         result[key].data[0].values
       expect(values.map((row) => row.Time)).toEqual(scenario.labels)
       expect(
         values.map((row) =>
-          key === 'spec_model_line' ? row.Count : row.rawQuota / 500000
+          key === 'spec_model_line' ? row.Count : row.rawTokens / 1000
         )
       ).toEqual([11, 2, 3, 4, 5, 6, 7, 8])
     }
@@ -143,14 +145,82 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
     const result = processChartData(data, scenario.granularity)
 
     for (const key of ['spec_line', 'spec_area', 'spec_model_line'] as const) {
-      const values: Array<{ Time: string; rawQuota: number; Count: number }> =
+      const values: Array<{ Time: string; rawTokens: number; Count: number }> =
         result[key].data[0].values
       expect(values.map((row) => row.Time)).toEqual(scenario.labels.slice(1))
       expect(
         values.map((row) =>
-          key === 'spec_model_line' ? row.Count : row.rawQuota / 500000
+          key === 'spec_model_line' ? row.Count : row.rawTokens / 1000
         )
       ).toEqual([0, 0, 0, 0, 0, 0, 8])
     }
+  })
+})
+
+describe('dashboard token distribution', () => {
+  test('uses token totals rather than quota for values, tooltips, and the header', () => {
+    const timestamp = new Date('2026-01-01T08:00:00').getTime() / 1000
+    const result = processChartData(
+      [
+        {
+          created_at: timestamp,
+          model_name: 'model-a',
+          quota: 9999999,
+          token_used: 1200,
+          count: 1,
+        },
+        {
+          created_at: timestamp,
+          model_name: 'model-a',
+          quota: 2,
+          token_used: 455,
+          count: 1,
+        },
+        {
+          created_at: timestamp,
+          model_name: 'model-b',
+          quota: 1,
+          token_used: 345,
+          count: 1,
+        },
+      ],
+      'hour'
+    )
+    const lineValues = result.spec_line.data[0].values.filter(
+      (row: { Usage: number }) => row.Usage > 0
+    )
+    const areaValues = result.spec_area.data[0].values.filter(
+      (row: { Usage: number }) => row.Usage > 0
+    )
+
+    for (const values of [lineValues, areaValues]) {
+      expect(values).toEqual([
+        {
+          Time: '01-01 08:00',
+          Model: 'model-a',
+          rawTokens: 1655,
+          Usage: 1655,
+          TimeSum: 2000,
+        },
+        {
+          Time: '01-01 08:00',
+          Model: 'model-b',
+          rawTokens: 345,
+          Usage: 345,
+          TimeSum: 2000,
+        },
+      ])
+    }
+    expect(result.totalTokenDisplay).toBe('2,000')
+    expect(
+      result.spec_line.tooltip.mark.content[0].value({ rawTokens: 1655 })
+    ).toBe('1,655')
+    expect(
+      result.spec_area.tooltip.mark.content[0].value({ rawTokens: 345 })
+    ).toBe('345')
+  })
+
+  test('shows zero tokens when there is no usage data', () => {
+    expect(processChartData([]).totalTokenDisplay).toBe('0')
   })
 })

@@ -21,7 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getUserQuotaDates } from '@/features/dashboard/api'
+import { getUserLogStats, getUserQuotaDates } from '@/features/dashboard/api'
 import { useModelStatCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import {
   buildQueryParams,
@@ -33,7 +33,7 @@ import type {
   DashboardFilters,
 } from '@/features/dashboard/types'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatCompactNumber, formatNumber, formatQuota } from '@/lib/format'
+import { formatCompactNumber, formatNumber, formatPercent } from '@/lib/format'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -89,11 +89,15 @@ export function LogStatCards(props: LogStatCardsProps) {
     const timeDiff = (timeRange.end_timestamp - timeRange.start_timestamp) / 60
     setTimeRangeMinutes(timeDiff)
 
-    void getUserQuotaDates(buildQueryParams(timeRange, filters), isAdmin)
-      .then((res) => {
+    const queryParams = buildQueryParams(timeRange, filters)
+    void Promise.all([
+      getUserQuotaDates(queryParams, isAdmin),
+      getUserLogStats(queryParams, isAdmin),
+    ])
+      .then(([quotaResponse, logStatsResponse]) => {
         if (abortController.signal.aborted) return
-        const data = res?.data || []
-        setStats(calculateDashboardStats(data))
+        const data = quotaResponse?.data || []
+        setStats(calculateDashboardStats(data, logStatsResponse?.data))
         onDataUpdate?.(data, false)
       })
       .catch(() => {
@@ -115,20 +119,21 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   const adaptedStats = {
     rpm: stats?.totalCount ?? 0,
-    quota: stats?.totalQuota ?? 0,
     tpm: stats?.totalTokens ?? 0,
+    inputTokens: stats?.totalPromptTokens ?? 0,
+    outputTokens: stats?.totalCompletionTokens ?? 0,
     cacheRead: stats?.totalCacheReadTokens ?? 0,
-    cacheCreation: stats?.totalCacheCreationTokens ?? 0,
+    inputCacheHitRate: stats?.inputCacheHitRate ?? 0,
   }
 
   const items = statCardsConfig.map((config) => {
     const rawValue = config.getValue(adaptedStats, timeRangeMinutes)
     const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
     const formatted =
-      config.key === 'quota'
+      config.key === 'inputCacheHitRate'
         ? {
-            displayValue: formatQuota(rawValue),
-            fullValue: formatQuota(rawValue),
+            displayValue: formatPercent(rawValue),
+            fullValue: formatPercent(rawValue),
           }
         : formatStatNumber(rawValue, locale)
 
@@ -145,7 +150,7 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-7'>
+      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-8'>
         {items.map((it, idx) => {
           const Icon = it.icon
           let valueContent

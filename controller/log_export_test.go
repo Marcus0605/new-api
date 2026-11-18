@@ -32,6 +32,11 @@ func callLogHandler(t *testing.T, handler gin.HandlerFunc, userId int, role int,
 	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/log?"+query, nil)
 	ctx.Set("id", userId)
 	ctx.Set("role", role)
+	if userId == 1 {
+		ctx.Set("username", "alice")
+	} else if userId == 2 {
+		ctx.Set("username", "bob")
+	}
 	handler(ctx)
 	var lines []map[string]any
 	for line := range strings.SplitSeq(strings.TrimSpace(recorder.Body.String()), "\n") {
@@ -56,8 +61,8 @@ func seedExportLogs(t *testing.T, mainDB *gorm.DB, logDB *gorm.DB, now int64) {
 	t.Helper()
 	require.NoError(t, mainDB.Create(&model.Channel{Id: 9, Name: "primary"}).Error)
 	logs := []model.Log{
-		{UserId: 1, Username: "alice", CreatedAt: now - 3600, Type: model.LogTypeConsume, ModelName: "gpt-a", ChannelId: 9, Quota: 10, RequestId: "a-1", Other: `{"admin_info":{"use_channel":["9"]}}`},
-		{UserId: 2, Username: "bob", CreatedAt: now - 1800, Type: model.LogTypeConsume, ModelName: "gpt-b", ChannelId: 9, Quota: 20, RequestId: "b-1"},
+		{UserId: 1, Username: "alice", CreatedAt: now - 3600, Type: model.LogTypeConsume, ModelName: "gpt-a", ChannelId: 9, Quota: 10, PromptTokens: 100, CompletionTokens: 50, RequestId: "a-1", Other: `{"admin_info":{"use_channel":["9"]}}`},
+		{UserId: 2, Username: "bob", CreatedAt: now - 1800, Type: model.LogTypeConsume, ModelName: "gpt-b", ChannelId: 9, Quota: 20, PromptTokens: 200, CompletionTokens: 100, RequestId: "b-1"},
 		{UserId: 1, Username: "alice", CreatedAt: now - 60, Type: model.LogTypeError, ModelName: "gpt-a", RequestId: "a-2"},
 		{UserId: 1, Username: "alice", CreatedAt: now - 400*24*3600, Type: model.LogTypeConsume, ModelName: "gpt-a", RequestId: "a-old"},
 	}
@@ -131,6 +136,15 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			listed = callLogHandler(t, GetAllLogs, 3, common.RoleAdminUser, query+"&username=alice")[0]
 			require.Equal(t, true, listed["success"])
 			assert.EqualValues(t, 2, listed["data"].(map[string]any)["total"])
+
+			selfStat := callLogHandler(t, GetLogsSelfStat, 1, common.RoleCommonUser, query)[0]
+			require.Equal(t, true, selfStat["success"])
+			assert.EqualValues(t, 100, selfStat["data"].(map[string]any)["prompt_tokens"])
+			assert.EqualValues(t, 50, selfStat["data"].(map[string]any)["completion_tokens"])
+			allStat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query)[0]
+			require.Equal(t, true, allStat["success"])
+			assert.EqualValues(t, 300, allStat["data"].(map[string]any)["prompt_tokens"])
+			assert.EqualValues(t, 150, allStat["data"].(map[string]any)["completion_tokens"])
 
 			own := callLogHandler(t, ExportUserLogs, 1, common.RoleCommonUser, query)
 			require.Len(t, own, 3)
