@@ -43,7 +43,7 @@ import { api } from '@/lib/api'
 
 import { CommonLogsFilterBar } from '../common-logs-filter-bar'
 import { CompactDateTimeRangePicker } from '../compact-date-time-range-picker'
-import { LogsFilterToolbar } from '../logs-filter-toolbar'
+import { LogsFilterInput, LogsFilterToolbar } from '../logs-filter-toolbar'
 import { UsageLogsProvider } from '../usage-logs-provider'
 
 const captureDescriptor = Object.getOwnPropertyDescriptor(
@@ -250,6 +250,41 @@ it('places the end action between Search and View on desktop', () => {
     .getAllByRole('button')
     .map((button) => button.textContent)
   expect(names.slice(-4)).toEqual(['Reset', 'Search', 'Export', 'View'])
+})
+
+it('shows advanced filters by default and allows collapsing them on desktop', async () => {
+  function DesktopAdvancedFixture() {
+    const table = useReactTable({
+      data: [],
+      columns: [],
+      getCoreRowModel: getCoreRowModel(),
+    })
+    return (
+      <LogsFilterToolbar
+        table={table}
+        primaryFilters={null}
+        advancedFilters={<LogsFilterInput placeholder='Token Name' />}
+        hasActiveFilters={false}
+        onReset={() => {}}
+        onSearch={() => {}}
+      />
+    )
+  }
+  const user = userEvent.setup()
+  render(<DesktopAdvancedFixture />)
+  expect(screen.getByRole('button', { name: 'Collapse' })).toHaveAttribute(
+    'aria-expanded',
+    'true'
+  )
+  expect(screen.getByPlaceholderText('Token Name')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Collapse' }))
+  expect(screen.getByRole('button', { name: 'Expand' })).toHaveAttribute(
+    'aria-expanded',
+    'false'
+  )
+  expect(screen.queryByPlaceholderText('Token Name')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Expand' }))
+  expect(screen.getByPlaceholderText('Token Name')).toBeVisible()
 })
 
 it('collapses only date and statistics while keeping the right-hand quick actions visible', async () => {

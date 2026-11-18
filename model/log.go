@@ -709,6 +709,8 @@ type Stat struct {
 	Tpm              int         `json:"tpm"`
 	PromptTokens     int64       `json:"prompt_tokens"`
 	CompletionTokens int64       `json:"completion_tokens"`
+	CacheReadTokens  int64       `json:"cache_read_tokens" gorm:"-"`
+	AverageUseTime   float64     `json:"average_use_time" gorm:"-"`
 	Models           []ModelStat `json:"models" gorm:"-"`
 	Tokens           []TokenStat `json:"tokens" gorm:"-"`
 }
@@ -725,7 +727,7 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 		Channel:        channel,
 		Group:          group,
 	}
-	tx, err := filter.apply(LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota, COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(completion_tokens), 0) completion_tokens"))
+	tx, err := filter.apply(LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota, COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(completion_tokens), 0) completion_tokens, count(*) request_count, COALESCE(sum(use_time), 0) total_use_time"))
 	if err != nil {
 		return stat, err
 	}
@@ -743,16 +745,63 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	if err != nil {
 		return stat, err
 	}
+	cacheQuery, err := filter.apply(LOG_DB.Table("logs").Select("logs.other"))
+	if err != nil {
+		return stat, err
+	}
 
 	// 只统计最近60秒的rpm和tpm
 	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
 	modelQuery = modelQuery.Where("logs.type IN ?", []int{LogTypeConsume, LogTypeError})
 	tokenQuery = tokenQuery.Where("logs.type IN ?", []int{LogTypeConsume, LogTypeError})
 
-	if err := tx.Scan(&stat).Error; err != nil {
+	var usageStat struct {
+		Quota            int
+		PromptTokens     int64
+		CompletionTokens int64
+		RequestCount     int64
+		TotalUseTime     int64
+	}
+	if err := tx.Scan(&usageStat).Error; err != nil {
 		common.SysError(common.LogText("failed to query log stat: %s", err.Error()))
 		return stat, common.NewMessage("Failed to query statistics")
 	}
+	stat.Quota = usageStat.Quota
+	stat.PromptTokens = usageStat.PromptTokens
+	stat.CompletionTokens = usageStat.CompletionTokens
+	if usageStat.RequestCount > 0 {
+		stat.AverageUseTime = float64(usageStat.TotalUseTime) / float64(usageStat.RequestCount)
+	}
+
+	rows, err := cacheQuery.Rows()
+	if err != nil {
+		common.SysError(common.LogText("failed to query log cache stats: %s", err.Error()))
+		return stat, common.NewMessage("Failed to query statistics")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var other string
+		if err := rows.Scan(&other); err != nil {
+			common.SysError(common.LogText("failed to scan log cache stats: %s", err.Error()))
+			return stat, common.NewMessage("Failed to query statistics")
+		}
+		if other == "" {
+			continue
+		}
+		var metadata struct {
+			CacheReadTokens int64 `json:"cache_tokens"`
+		}
+		if err := common.UnmarshalJsonStr(other, &metadata); err != nil {
+			common.SysError(common.LogText("failed to parse log cache stats: %s", err.Error()))
+			return stat, common.NewMessage("Failed to query statistics")
+		}
+		stat.CacheReadTokens += metadata.CacheReadTokens
+	}
+	if err := rows.Err(); err != nil {
+		common.SysError(common.LogText("failed to iterate log cache stats: %s", err.Error()))
+		return stat, common.NewMessage("Failed to query statistics")
+	}
+
 	var rateStat struct {
 		Rpm int
 		Tpm int

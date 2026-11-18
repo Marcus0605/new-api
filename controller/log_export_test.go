@@ -61,8 +61,8 @@ func seedExportLogs(t *testing.T, mainDB *gorm.DB, logDB *gorm.DB, now int64) {
 	t.Helper()
 	require.NoError(t, mainDB.Create(&model.Channel{Id: 9, Name: "primary"}).Error)
 	logs := []model.Log{
-		{UserId: 1, Username: "alice", CreatedAt: now - 3600, Type: model.LogTypeConsume, ModelName: "gpt-a", ChannelId: 9, Quota: 10, PromptTokens: 100, CompletionTokens: 50, RequestId: "a-1", Other: `{"admin_info":{"use_channel":["9"]}}`},
-		{UserId: 2, Username: "bob", CreatedAt: now - 1800, Type: model.LogTypeConsume, ModelName: "gpt-b", ChannelId: 9, Quota: 20, PromptTokens: 200, CompletionTokens: 100, RequestId: "b-1"},
+		{UserId: 1, Username: "alice", CreatedAt: now - 3600, Type: model.LogTypeConsume, ModelName: "gpt-a", ChannelId: 9, Quota: 10, PromptTokens: 100, CompletionTokens: 50, UseTime: 10, RequestId: "a-1", Other: `{"cache_tokens":40,"admin_info":{"use_channel":["9"]}}`},
+		{UserId: 2, Username: "bob", CreatedAt: now - 1800, Type: model.LogTypeConsume, ModelName: "gpt-b", ChannelId: 9, Quota: 20, PromptTokens: 200, CompletionTokens: 100, UseTime: 30, RequestId: "b-1", Other: `{"cache_tokens":60}`},
 		{UserId: 1, Username: "alice", CreatedAt: now - 60, Type: model.LogTypeError, ModelName: "gpt-a", RequestId: "a-2"},
 		{UserId: 1, Username: "alice", CreatedAt: now - 400*24*3600, Type: model.LogTypeConsume, ModelName: "gpt-a", RequestId: "a-old"},
 	}
@@ -112,7 +112,7 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 				mainType = common.DatabaseTypeSQLite
 			}
 			useLogExportDatabases(t, mainDB, db, mainType, tc.typ)
-			require.NoError(t, mainDB.AutoMigrate(&model.Channel{}))
+			require.NoError(t, mainDB.AutoMigrate(&model.Channel{}, &model.QuotaData{}))
 			if tc.kind == "clickhouse" {
 				t.Setenv("LOG_SQL_DSN", isolatedDSN)
 				require.NoError(t, model.InitLogDB())
@@ -141,10 +141,18 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			require.Equal(t, true, selfStat["success"])
 			assert.EqualValues(t, 100, selfStat["data"].(map[string]any)["prompt_tokens"])
 			assert.EqualValues(t, 50, selfStat["data"].(map[string]any)["completion_tokens"])
+			assert.EqualValues(t, 40, selfStat["data"].(map[string]any)["cache_read_tokens"])
+			assert.EqualValues(t, 10, selfStat["data"].(map[string]any)["average_use_time"])
 			allStat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query)[0]
 			require.Equal(t, true, allStat["success"])
 			assert.EqualValues(t, 300, allStat["data"].(map[string]any)["prompt_tokens"])
 			assert.EqualValues(t, 150, allStat["data"].(map[string]any)["completion_tokens"])
+			assert.EqualValues(t, 100, allStat["data"].(map[string]any)["cache_read_tokens"])
+			assert.EqualValues(t, 20, allStat["data"].(map[string]any)["average_use_time"])
+			emptyStat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query+"&model_name=missing")[0]
+			require.Equal(t, true, emptyStat["success"])
+			assert.EqualValues(t, 0, emptyStat["data"].(map[string]any)["cache_read_tokens"])
+			assert.EqualValues(t, 0, emptyStat["data"].(map[string]any)["average_use_time"])
 
 			own := callLogHandler(t, ExportUserLogs, 1, common.RoleCommonUser, query)
 			require.Len(t, own, 3)

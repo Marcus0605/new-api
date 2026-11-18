@@ -21,7 +21,14 @@ import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatLogQuota } from '@/lib/format'
+import { toIntlLocale } from '@/i18n/languages'
+import {
+  formatCompactNumber,
+  formatLogQuota,
+  formatNumber,
+  formatPercent,
+  formatUseTime,
+} from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
@@ -36,9 +43,13 @@ function StatBadge(props: {
   label: string
   value: string | number
   accent: string
+  title?: string
 }) {
   return (
-    <span className='border-border/60 bg-muted/25 inline-flex h-7 items-center gap-2 rounded-md border px-2.5 text-xs shadow-xs'>
+    <span
+      className='border-border/60 bg-muted/25 inline-flex h-7 max-w-full items-center gap-2 rounded-md border px-2.5 text-xs shadow-xs'
+      title={props.title}
+    >
       <span className={cn('h-3.5 w-0.5 rounded-full', props.accent)} />
       <span className='text-muted-foreground'>{props.label}</span>
       <span className='text-foreground/85 font-mono font-semibold tabular-nums'>
@@ -49,7 +60,8 @@ function StatBadge(props: {
 }
 
 export function CommonLogsStats() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const { isAdminView: isAdmin } = useLogsViewScope()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
@@ -86,8 +98,15 @@ export function CommonLogsStats() {
     )
   }
 
+  const promptTokens = stats?.prompt_tokens ?? 0
+  const completionTokens = stats?.completion_tokens ?? 0
+  const cacheReadTokens = stats?.cache_read_tokens ?? 0
+  const totalTokens = promptTokens + completionTokens
+  const inputCacheHitRate =
+    promptTokens > 0 ? (cacheReadTokens / promptTokens) * 100 : 0
+
   return (
-    <div className='flex flex-wrap items-center gap-2'>
+    <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>
       <StatBadge
         label={t('Usage')}
         value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
@@ -95,13 +114,47 @@ export function CommonLogsStats() {
       />
       <StatBadge
         label={t('RPM')}
-        value={stats?.rpm || 0}
+        value={formatNumber(stats?.rpm ?? 0, locale)}
         accent='bg-rose-500/65'
       />
       <StatBadge
         label={t('TPM')}
-        value={stats?.tpm || 0}
+        value={formatNumber(stats?.tpm ?? 0, locale)}
         accent='bg-slate-400/70'
+      />
+      <StatBadge
+        label={t('Total Tokens')}
+        value={formatCompactNumber(totalTokens, locale)}
+        title={formatNumber(totalTokens, locale)}
+        accent='bg-violet-500/70'
+      />
+      <StatBadge
+        label={t('Total Input')}
+        value={formatCompactNumber(promptTokens, locale)}
+        title={formatNumber(promptTokens, locale)}
+        accent='bg-blue-500/70'
+      />
+      <StatBadge
+        label={t('Total Output')}
+        value={formatCompactNumber(completionTokens, locale)}
+        title={formatNumber(completionTokens, locale)}
+        accent='bg-indigo-500/70'
+      />
+      <StatBadge
+        label={t('Total Input Cache')}
+        value={formatCompactNumber(cacheReadTokens, locale)}
+        title={formatNumber(cacheReadTokens, locale)}
+        accent='bg-emerald-500/70'
+      />
+      <StatBadge
+        label={t('Average Input Cache Hit Rate')}
+        value={formatPercent(inputCacheHitRate)}
+        accent='bg-teal-500/70'
+      />
+      <StatBadge
+        label={t('Average Duration')}
+        value={formatUseTime(stats?.average_use_time ?? 0)}
+        accent='bg-amber-500/70'
       />
     </div>
   )
