@@ -802,6 +802,7 @@
     "Auto groups must not contain duplicates": "Auto groups must not contain duplicates",
     "Auto negotiates HTTP/2 when available. HTTP/1.1 forces multiple keep-alive connections under concurrency.": "Auto negotiates HTTP/2 when available. HTTP/1.1 forces multiple keep-alive connections under concurrency.",
     "Auto refresh": "Auto refresh",
+    "Auto Refresh": "Auto Refresh",
     "Auto refresh (5s)": "Auto refresh (5s)",
     "Auto Sync Upstream Models": "Auto Sync Upstream Models",
     "Auto-disable channel": "Auto-disable channel",

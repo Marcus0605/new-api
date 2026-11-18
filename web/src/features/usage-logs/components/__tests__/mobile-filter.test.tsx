@@ -26,6 +26,7 @@ import {
 } from '@tanstack/react-router'
 import { getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import {
+  act,
   render,
   screen,
   waitFor,
@@ -45,6 +46,8 @@ import { CommonLogsFilterBar } from '../common-logs-filter-bar'
 import { CompactDateTimeRangePicker } from '../compact-date-time-range-picker'
 import { LogsFilterInput, LogsFilterToolbar } from '../logs-filter-toolbar'
 import { UsageLogsProvider } from '../usage-logs-provider'
+
+let queryClient: QueryClient
 
 const captureDescriptor = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -98,12 +101,11 @@ async function renderMobileFilter() {
       ],
     }),
   })
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
   render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>
   )
@@ -170,6 +172,47 @@ it('applies mobile drawer filters only when Search is pressed', async () => {
   )
 })
 
+it('refreshes immediately and on the selected interval with the current filters until disabled', async () => {
+  const router = await renderMobileFilter()
+  const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
+  const setIntervalSpy = vi.spyOn(window, 'setInterval')
+  const clearIntervalSpy = vi.spyOn(window, 'clearInterval')
+  const user = userEvent.setup()
+  const refresh = screen.getByRole('combobox', { name: 'Auto Refresh' })
+  expect(refresh).toHaveTextContent('Off')
+
+  await user.click(refresh)
+  await user.click(await screen.findByRole('option', { name: '5s' }))
+  await waitFor(() =>
+    expect(router.state.location.search).toMatchObject({
+      page: 1,
+      group: 'default',
+      type: ['2'],
+    })
+  )
+  expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['logs'] })
+  expect(invalidateQueries).toHaveBeenCalledWith({
+    queryKey: ['usage-logs-stats'],
+  })
+  expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 5000)
+  const intervalCallback = setIntervalSpy.mock.calls.find(
+    ([, delay]) => delay === 5000
+  )?.[0]
+
+  invalidateQueries.mockClear()
+  await act(async () => {
+    if (typeof intervalCallback === 'function') intervalCallback()
+  })
+  expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['logs'] })
+  expect(invalidateQueries).toHaveBeenCalledWith({
+    queryKey: ['usage-logs-stats'],
+  })
+
+  await user.click(refresh)
+  await user.click(await screen.findByRole('option', { name: 'Off' }))
+  expect(clearIntervalSpy).toHaveBeenCalled()
+})
+
 it('keeps all quick actions visible without opening a menu', async () => {
   await renderMobileFilter()
   const user = userEvent.setup()
@@ -180,6 +223,10 @@ it('keeps all quick actions visible without opening a menu', async () => {
   await user.click(screen.getByRole('button', { name: 'Hide' }))
   expect(screen.getByRole('button', { name: 'Show' })).toBeVisible()
   screen.getByRole('button', { name: 'Show' }).focus()
+  await user.tab()
+  expect(
+    screen.getByRole('combobox', { name: 'Auto Refresh' })
+  ).toHaveFocus()
   for (const name of ['Filter', 'Search', 'Export', 'View']) {
     await user.tab()
     expect(screen.getByRole('button', { name })).toHaveFocus()

@@ -24,11 +24,11 @@ import { useTranslation } from 'react-i18next'
 
 import { StaggerContainer, StaggerItem } from '@/components/page-transition'
 import { Button } from '@/components/ui/button'
-import { getUserQuotaDates } from '@/features/dashboard/api'
+import { getUserQuotaDates, getUserTotalTokens } from '@/features/dashboard/api'
 import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
 import type { QuotaDataItem } from '@/features/dashboard/types'
 import { useStatus } from '@/hooks/use-status'
-import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
+import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber, formatQuota } from '@/lib/format'
 import { requireServerSuccess } from '@/lib/server-error-message'
 import { computeTimeRange } from '@/lib/time'
@@ -69,7 +69,7 @@ function buildSummarySparklines(
       end,
       SUMMARY_SPARKLINE_BUCKETS
     )
-    usage[index] += Number(item.quota) || 0
+    usage[index] += Number(item.token_used) || 0
     requests[index] += Number(item.count) || 0
   }
 
@@ -138,13 +138,13 @@ const HEALTH_CONFIG: Record<
 }
 
 export function SummaryCards() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const user = useAuthStore((state) => state.auth.user)
-  const { status, loading } = useStatus()
+  const { loading } = useStatus()
 
   const summaryTimeRange = useMemo(() => computeTimeRange(1), [])
   const remainQuota = Number(user?.quota ?? 0)
-  const usedQuota = Number(user?.used_quota ?? 0)
   const requestCount = Number(user?.request_count ?? 0)
 
   const usageTrendQuery = useQuery({
@@ -165,24 +165,21 @@ export function SummaryCards() {
       ),
     staleTime: 60 * 1000,
   })
+  const totalTokensQuery = useQuery({
+    queryKey: ['dashboard', 'overview', 'total-tokens'],
+    queryFn: async () => requireServerSuccess(await getUserTotalTokens()),
+    staleTime: 60 * 1000,
+  })
 
   const summaryValues = useMemo(() => {
     return {
-      usedDisplay: formatQuota(usedQuota),
-      requestCountDisplay: formatNumber(requestCount),
+      usedDisplay: formatNumber(
+        totalTokensQuery.data?.data.total_tokens ?? 0,
+        locale
+      ),
+      requestCountDisplay: formatNumber(requestCount, locale),
     }
-  }, [requestCount, usedQuota])
-
-  const currencyEnabledFromStore = isCurrencyDisplayEnabled()
-  const statusCurrencyFlag =
-    typeof status?.display_in_currency === 'boolean'
-      ? Boolean(status.display_in_currency)
-      : undefined
-  const currencyEnabled =
-    statusCurrencyFlag !== undefined
-      ? statusCurrencyFlag
-      : currencyEnabledFromStore
-  const currencyLabel = currencyEnabled ? getCurrencyLabel() : 'Tokens'
+  }, [locale, requestCount, totalTokensQuery.data?.data.total_tokens])
 
   const sparklineData = useMemo(
     () =>
@@ -208,12 +205,20 @@ export function SummaryCards() {
       ),
     [usageTrendQuery.data?.data]
   )
+  const recentTokenUsage = useMemo(
+    () =>
+      (usageTrendQuery.data?.data ?? []).reduce(
+        (total, item) => total + (Number(item.token_used) || 0),
+        0
+      ),
+    [usageTrendQuery.data?.data]
+  )
 
   const healthLevel = getHealthLevel(remainQuota, recentUsage)
   const healthCfg = HEALTH_CONFIG[healthLevel]
   const runwayDays = getRunwayDays(remainQuota, recentUsage)
 
-  const todayUsageDisplay = formatQuota(recentUsage)
+  const todayUsageDisplay = formatNumber(recentTokenUsage, locale)
   let runwayDisplay: string
   if (runwayDays !== null) {
     if (runwayDays < 1) {
@@ -232,8 +237,6 @@ export function SummaryCards() {
   const items = useSummaryCardsConfig({
     ...summaryValues,
     todayUsageDisplay,
-    currencyEnabled,
-    currencyLabel,
   }).map((config, index) => {
     const tones = ['accent-1', 'accent-2', 'accent-3'] as const
 
@@ -316,7 +319,7 @@ export function SummaryCards() {
                   <span className='truncate'>{t('Last 24h usage')}</span>
                 </div>
                 <div className='text-foreground mt-1.5 truncate text-xs font-semibold tabular-nums'>
-                  {formatQuota(recentUsage)}
+                  {formatNumber(recentTokenUsage, locale)}
                 </div>
               </div>
               <div className='bg-background/60 rounded-lg px-2.5 py-2'>

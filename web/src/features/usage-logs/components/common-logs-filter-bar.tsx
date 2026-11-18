@@ -20,7 +20,7 @@ import { useQueryClient, useIsFetching, useQuery } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import type { Table } from '@tanstack/react-table'
 import { Eye, EyeOff } from 'lucide-react'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
@@ -191,6 +191,7 @@ export function CommonLogsFilterBar<TData>(
     searchParams.type,
   ])
   const [draft, setDraft] = useState<CommonLogDraft>(() => searchState)
+  const [autoRefreshSeconds, setAutoRefreshSeconds] = useState(0)
   const activeDraft =
     draft.sourceKey === searchState.sourceKey ? draft : searchState
   const filters = activeDraft.filters
@@ -228,6 +229,12 @@ export function CommonLogsFilterBar<TData>(
     },
     [filters, logType, navigate, queryClient]
   )
+
+  useEffect(() => {
+    if (autoRefreshSeconds === 0) return
+    const timer = window.setInterval(handleApply, autoRefreshSeconds * 1000)
+    return () => window.clearInterval(timer)
+  }, [autoRefreshSeconds, handleApply])
 
   const handleReset = useCallback(() => {
     const { start, end } = getDefaultTimeRange()
@@ -319,6 +326,33 @@ export function CommonLogsFilterBar<TData>(
     </Tooltip>
   )
 
+  const autoRefreshSelect = (
+    <Select
+      value={String(autoRefreshSeconds)}
+      onValueChange={(value) => {
+        const seconds = Number(value)
+        if (![0, 5, 10, 30, 60].includes(seconds)) return
+        setAutoRefreshSeconds(seconds)
+        if (seconds > 0) handleApply()
+      }}
+    >
+      <SelectTrigger aria-label={t('Auto Refresh')} className='w-28' size='sm'>
+        <SelectValue>
+          {autoRefreshSeconds === 0 ? t('Off') : `${autoRefreshSeconds}s`}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent alignItemWithTrigger={false}>
+        <SelectGroup>
+          <SelectItem value='0'>{t('Off')}</SelectItem>
+          {[5, 10, 30, 60].map((seconds) => (
+            <SelectItem key={seconds} value={String(seconds)}>
+              {seconds}s
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  )
   const dateRangeFilter = (
     <LogsFilterField wide>
       <CompactDateTimeRangePicker
@@ -489,7 +523,12 @@ export function CommonLogsFilterBar<TData>(
       table={props.table}
       compactMobile
       stats={statsBar}
-      actionStart={sensitiveToggle}
+      actionStart={
+        <>
+          {sensitiveToggle}
+          {autoRefreshSelect}
+        </>
+      }
       actionEnd={<ExportLogsDialog />}
       primaryFilters={
         <>

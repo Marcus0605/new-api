@@ -168,6 +168,15 @@ func GetQuotaDataByUsername(username string, startTime int64, endTime int64, tok
 	return quotaDatas, err
 }
 
+func GetUserTotalTokens(userId int) (int64, error) {
+	var totalTokens int64
+	err := DB.Table("quota_data").
+		Select("COALESCE(sum(token_used), 0)").
+		Where("user_id = ?", userId).
+		Scan(&totalTokens).Error
+	return totalTokens, err
+}
+
 func GetQuotaDataByUserId(userId int, startTime int64, endTime int64, tokenID int) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
 	// 从quota_data表中查询数据

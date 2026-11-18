@@ -143,6 +143,10 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 		UserID: 1, Username: "alice", TokenID: 22, UseGroup: "default",
 		ModelName: "gpt-a", CreatedAt: 1000, Count: 2, TokenUsed: 27, CacheReadTokens: 9,
 	})
+	seedFlowQuotaData(t, QuotaData{
+		UserID: 2, Username: "bob", TokenID: 22, UseGroup: "default",
+		ModelName: "gpt-b", CreatedAt: 1000, Count: 1, TokenUsed: 99,
+	})
 	require.NoError(t, DB.Create(&Log{
 		UserId: 1, Username: "alice", TokenId: 11, TokenName: "shared",
 		ModelName: "gpt-a", CreatedAt: 1000, Type: LogTypeConsume,
@@ -178,6 +182,13 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, selfRows, 1)
 	require.Equal(t, 27, selfRows[0].TokenUsed)
+
+	totalTokens, err := GetUserTotalTokens(1)
+	require.NoError(t, err)
+	require.Equal(t, int64(42), totalTokens)
+	otherUserTotal, err := GetUserTotalTokens(2)
+	require.NoError(t, err)
+	require.Equal(t, int64(99), otherUserTotal)
 
 	stat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 11)
 	require.NoError(t, err)

@@ -53,6 +53,14 @@ export async function getUserQuotaDates(
   return res.data
 }
 
+export async function getUserTotalTokens() {
+  const res = await api.get<{
+    success: boolean
+    data: { total_tokens: number }
+  }>('/api/data/self/total')
+  return res.data
+}
+
 export async function getUserLogStats(
   params: {
     start_timestamp: number

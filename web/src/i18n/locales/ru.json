@@ -802,6 +802,7 @@
     "Auto groups must not contain duplicates": "Группы Auto не должны повторяться",
     "Auto negotiates HTTP/2 when available. HTTP/1.1 forces multiple keep-alive connections under concurrency.": "Авто согласовывает HTTP/2 при наличии. HTTP/1.1 использует несколько keep-alive соединений при параллельных запросах.",
     "Auto refresh": "Автообновление",
+    "Auto Refresh": "Автообновление",
     "Auto refresh (5s)": "Автообновление (5 с)",
     "Auto Sync Upstream Models": "Автоматическая синхронизация моделей провайдера",
     "Auto-disable channel": "Автоотключение канала",

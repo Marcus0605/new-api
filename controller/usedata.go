@@ -61,6 +61,15 @@ func GetQuotaDatesByUser(c *gin.Context) {
 	})
 }
 
+func GetUserTotalTokens(c *gin.Context) {
+	totalTokens, err := model.GetUserTotalTokens(c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"total_tokens": totalTokens})
+}
+
 func GetUserQuotaDates(c *gin.Context) {
 	userId := c.GetInt("id")
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
