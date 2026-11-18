@@ -512,7 +512,7 @@ func TestApplyChannelUpstreamModelUpdatesWithMapping(t *testing.T) {
 			)
 			require.NoError(t, err)
 			assert.True(t, changed)
-			assert.Equal(t, []string{"gpt-new"}, added)
+			assert.Equal(t, []string{"gpt"}, added)
 			assert.Equal(t, []string{"gpt-old"}, removed)
 			assert.Equal(t, []string{"gpt-extra"}, remaining)
 			assert.Empty(t, remainingRemove)

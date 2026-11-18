@@ -1081,6 +1081,7 @@ func applyChannelUpstreamModelUpdates(
 	pendingAddModels := normalizeModelNames(settings.UpstreamModelUpdateLastDetectedModels)
 	pendingRemoveModels := normalizeModelNames(settings.UpstreamModelUpdateLastRemovedModels)
 	addModels := intersectModelNames(addModelsInput, pendingAddModels)
+	addedModels = addModels
 	ignoreModels := intersectModelNames(ignoreModelsInput, pendingAddModels)
 	removeModels := intersectModelNames(removeModelsInput, pendingRemoveModels)
 	removeModels = subtractModelNames(removeModels, addModels)
@@ -1140,8 +1141,13 @@ func applyChannelUpstreamModelUpdates(
 	nextModels := applySelectedModelChanges(originModels, addModels, removeModels)
 	if syncMappingModels {
 		for _, source := range mappingSources {
-			nextModels = subtractModelNames(nextModels, []string{normalizedMappingInput[source]})
+			target := normalizedMappingInput[source]
+			nextModels = subtractModelNames(nextModels, []string{target})
 			nextModels = mergeModelNames(nextModels, []string{source})
+			if slices.Contains(addModels, target) {
+				addedModels = subtractModelNames(addedModels, []string{target})
+				addedModels = mergeModelNames(addedModels, []string{source})
+			}
 		}
 	}
 	modelsChanged = !slices.Equal(originModels, nextModels)
@@ -1166,13 +1172,13 @@ func applyChannelUpstreamModelUpdates(
 	if modelsChanged {
 		err := channel.UpdateAbilities(nil)
 		if err != nil {
-			return addModels, removeModels, remainingModels, remainingRemoveModels, true, err
+			return addedModels, removeModels, remainingModels, remainingRemoveModels, true, err
 		}
 	}
 	if modelsChanged || mappingChanged {
 		model.BumpSyncTopic(model.SyncTopicChannels)
 	}
-	return addModels, removeModels, remainingModels, remainingRemoveModels, modelsChanged || mappingChanged, nil
+	return addedModels, removeModels, remainingModels, remainingRemoveModels, modelsChanged || mappingChanged, nil
 }
 
 func collectPendingApplyUpstreamModelChanges(settings dto.ChannelOtherSettings) (pendingAddModels []string, pendingRemoveModels []string) {
