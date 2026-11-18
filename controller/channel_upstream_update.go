@@ -70,10 +70,12 @@ var channelUpstreamModelUpdateNotifyState = struct {
 }{}
 
 type applyChannelUpstreamModelUpdatesRequest struct {
-	ID           int      `json:"id"`
-	AddModels    []string `json:"add_models"`
-	RemoveModels []string `json:"remove_models"`
-	IgnoreModels []string `json:"ignore_models"`
+	ID                int               `json:"id"`
+	AddModels         []string          `json:"add_models"`
+	RemoveModels      []string          `json:"remove_models"`
+	IgnoreModels      []string          `json:"ignore_models"`
+	ModelMapping      map[string]string `json:"model_mapping"`
+	SyncMappingModels bool              `json:"sync_mapping_models"`
 }
 
 type applyAllChannelUpstreamModelUpdatesResult struct {
@@ -580,13 +582,16 @@ func sendChannelRequest(channel *model.Channel, request *http.Request) (*http.Re
 	return client.Do(request)
 }
 
-func updateChannelUpstreamModelSettings(channel *model.Channel, settings dto.ChannelOtherSettings, updateModels bool) error {
+func updateChannelUpstreamModelSettings(channel *model.Channel, settings dto.ChannelOtherSettings, updateModels bool, updateMapping bool) error {
 	channel.SetOtherSettings(settings)
 	updates := map[string]any{
 		"settings": channel.OtherSettings,
 	}
 	if updateModels {
 		updates["models"] = channel.Models
+	}
+	if updateMapping {
+		updates["model_mapping"] = channel.ModelMapping
 	}
 	return model.DB.Model(&model.Channel{}).Where("id = ?", channel.Id).Updates(updates).Error
 }
@@ -609,7 +614,7 @@ func checkAndPersistChannelUpstreamModelUpdates(
 	pendingAddModels, pendingRemoveModels, fetchErr := collectPendingUpstreamModelChanges(channel, *settings)
 	settings.UpstreamModelUpdateLastCheckTime = now
 	if fetchErr != nil {
-		if err = updateChannelUpstreamModelSettings(channel, *settings, false); err != nil {
+		if err = updateChannelUpstreamModelSettings(channel, *settings, false, false); err != nil {
 			return false, 0, err
 		}
 		return false, 0, fetchErr
@@ -629,7 +634,7 @@ func checkAndPersistChannelUpstreamModelUpdates(
 	}
 	settings.UpstreamModelUpdateLastRemovedModels = pendingRemoveModels
 
-	if err = updateChannelUpstreamModelSettings(channel, *settings, modelsChanged); err != nil {
+	if err = updateChannelUpstreamModelSettings(channel, *settings, modelsChanged, false); err != nil {
 		return false, autoAdded, err
 	}
 	if modelsChanged {
@@ -981,6 +986,8 @@ func ApplyChannelUpstreamModelUpdates(c *gin.Context) {
 		req.AddModels,
 		req.IgnoreModels,
 		req.RemoveModels,
+		req.ModelMapping,
+		req.SyncMappingModels,
 	)
 	if err != nil {
 		common.ApiError(c, err)
@@ -1005,6 +1012,7 @@ func ApplyChannelUpstreamModelUpdates(c *gin.Context) {
 			"remaining_models":        remainingModels,
 			"remaining_remove_models": remainingRemoveModels,
 			"models":                  channel.Models,
+			"model_mapping":           channel.ModelMapping,
 			"settings":                channel.OtherSettings,
 		},
 	})
@@ -1059,6 +1067,8 @@ func applyChannelUpstreamModelUpdates(
 	addModelsInput []string,
 	ignoreModelsInput []string,
 	removeModelsInput []string,
+	modelMappingInput map[string]string,
+	syncMappingModels bool,
 ) (
 	addedModels []string,
 	removedModels []string,
@@ -1075,8 +1085,65 @@ func applyChannelUpstreamModelUpdates(
 	removeModels := intersectModelNames(removeModelsInput, pendingRemoveModels)
 	removeModels = subtractModelNames(removeModels, addModels)
 
+	normalizedMappingInput := make(map[string]string, len(modelMappingInput))
+	for sourceInput, targetInput := range modelMappingInput {
+		source := strings.TrimSpace(sourceInput)
+		target := strings.TrimSpace(targetInput)
+		if source == "" || target == "" || source == target {
+			return nil, nil, nil, nil, false, errors.New("model mapping names must be non-empty and different")
+		}
+		if !slices.Contains(addModels, target) {
+			return nil, nil, nil, nil, false, errors.New("model mapping target must be a selected upstream addition")
+		}
+		if _, exists := normalizedMappingInput[source]; exists {
+			return nil, nil, nil, nil, false, errors.New("duplicate model mapping source")
+		}
+		normalizedMappingInput[source] = target
+	}
+	mappingSources := make([]string, 0, len(normalizedMappingInput))
+	for source := range normalizedMappingInput {
+		mappingSources = append(mappingSources, source)
+	}
+	slices.Sort(mappingSources)
+
+	mappingChanged := false
+	if len(normalizedMappingInput) > 0 {
+		rawMapping := ""
+		if channel.ModelMapping != nil {
+			rawMapping = strings.TrimSpace(*channel.ModelMapping)
+		}
+		mergedMapping := normalizeChannelModelMapping(channel)
+		if rawMapping != "" && rawMapping != "{}" && mergedMapping == nil {
+			return nil, nil, nil, nil, false, errors.New("existing model mapping must be valid JSON")
+		}
+		if mergedMapping == nil {
+			mergedMapping = make(map[string]string)
+		}
+		for _, source := range mappingSources {
+			target := normalizedMappingInput[source]
+			if mergedMapping[source] != target {
+				mappingChanged = true
+			}
+			mergedMapping[source] = target
+		}
+		if mappingChanged {
+			encodedMapping, marshalErr := common.Marshal(mergedMapping)
+			if marshalErr != nil {
+				return nil, nil, nil, nil, false, marshalErr
+			}
+			mappingValue := string(encodedMapping)
+			channel.ModelMapping = &mappingValue
+		}
+	}
+
 	originModels := normalizeModelNames(channel.GetModels())
 	nextModels := applySelectedModelChanges(originModels, addModels, removeModels)
+	if syncMappingModels {
+		for _, source := range mappingSources {
+			nextModels = subtractModelNames(nextModels, []string{normalizedMappingInput[source]})
+			nextModels = mergeModelNames(nextModels, []string{source})
+		}
+	}
 	modelsChanged = !slices.Equal(originModels, nextModels)
 	if modelsChanged {
 		channel.Models = strings.Join(nextModels, ",")
@@ -1092,18 +1159,20 @@ func applyChannelUpstreamModelUpdates(
 	settings.UpstreamModelUpdateLastRemovedModels = remainingRemoveModels
 	settings.UpstreamModelUpdateLastCheckTime = common.GetTimestamp()
 
-	if err := updateChannelUpstreamModelSettings(channel, settings, modelsChanged); err != nil {
+	if err := updateChannelUpstreamModelSettings(channel, settings, modelsChanged, mappingChanged); err != nil {
 		return nil, nil, nil, nil, false, err
 	}
 
 	if modelsChanged {
 		err := channel.UpdateAbilities(nil)
-		model.BumpSyncTopic(model.SyncTopicChannels)
 		if err != nil {
 			return addModels, removeModels, remainingModels, remainingRemoveModels, true, err
 		}
 	}
-	return addModels, removeModels, remainingModels, remainingRemoveModels, modelsChanged, nil
+	if modelsChanged || mappingChanged {
+		model.BumpSyncTopic(model.SyncTopicChannels)
+	}
+	return addModels, removeModels, remainingModels, remainingRemoveModels, modelsChanged || mappingChanged, nil
 }
 
 func collectPendingApplyUpstreamModelChanges(settings dto.ChannelOtherSettings) (pendingAddModels []string, pendingRemoveModels []string) {
@@ -1162,6 +1231,8 @@ func ApplyAllChannelUpstreamModelUpdates(c *gin.Context) {
 				pendingAddModels,
 				nil,
 				pendingRemoveModels,
+				nil,
+				false,
 			)
 			if err != nil {
 				failed = append(failed, channel.Id)

@@ -115,9 +115,13 @@ export function useChannelUpstreamUpdates(refresh: () => Promise<void>) {
     async ({
       addModels: selectedAdd = [],
       removeModels: selectedRemove = [],
+      modelMapping,
+      syncMappingModels = false,
     }: {
       addModels?: string[]
       removeModels?: string[]
+      modelMapping?: Record<string, string>
+      syncMappingModels?: boolean
     } = {}) => {
       if (
         applyRef.current ||
@@ -139,6 +143,23 @@ export function useChannelUpstreamUpdates(refresh: () => Promise<void>) {
       applyRef.current = true
       setApplyLoading(true)
       try {
+        const requestBody: {
+          id: number
+          add_models: string[]
+          ignore_models: string[]
+          remove_models: string[]
+          model_mapping?: Record<string, string>
+          sync_mapping_models?: boolean
+        } = {
+          id: channel.id,
+          add_models: normSelectedAdd,
+          ignore_models: [],
+          remove_models: normSelectedRemove,
+        }
+        if (modelMapping && Object.keys(modelMapping).length > 0) {
+          requestBody.model_mapping = modelMapping
+          requestBody.sync_mapping_models = syncMappingModels
+        }
         const res = await api.post<
           UpstreamUpdateResponse<{
             added_models: string[] | null
@@ -148,12 +169,7 @@ export function useChannelUpstreamUpdates(refresh: () => Promise<void>) {
           }>
         >(
           '/api/channel/upstream_updates/apply',
-          {
-            id: channel.id,
-            add_models: normSelectedAdd,
-            ignore_models: [],
-            remove_models: normSelectedRemove,
-          },
+          requestBody,
           upstreamUpdateRequestConfig
         )
         if (!res.data?.success || !res.data.data) {

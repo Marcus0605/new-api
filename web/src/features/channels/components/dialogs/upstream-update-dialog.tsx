@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ConfirmDialog } from '@/components/confirm-dialog'
@@ -31,7 +31,9 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 
 import type { ChannelUpstreamUpdateState } from '../../hooks/use-channel-upstream-updates'
+import { deriveModelMappingPairs, type ModelMappingRule } from '../../lib'
 import { UpstreamModelSelection } from '../upstream-model-selection'
+import { UpstreamUpdateMapping } from '../upstream-update-mapping'
 
 type UpstreamUpdateDialogProps = {
   upstream: ChannelUpstreamUpdateState
@@ -76,6 +78,27 @@ function UpstreamUpdateSession(props: UpstreamUpdateDialogProps) {
   const [selectedAdd, setSelectedAdd] = useState(props.upstream.addModels)
   const [selectedRemove, setSelectedRemove] = useState<string[]>([])
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [mappingRule, setMappingRule] = useState<ModelMappingRule>({
+    type: 'strip-suffix',
+    values: '',
+  })
+  const [syncMappingModels, setSyncMappingModels] = useState(true)
+  const mappingDerivation = useMemo(
+    () => deriveModelMappingPairs(selectedAdd, 'upstream', mappingRule),
+    [selectedAdd, mappingRule]
+  )
+  let hasMappingRule = false
+  if (mappingRule.type === 'replace') {
+    hasMappingRule = mappingRule.find.length > 0
+  } else if (
+    mappingRule.type === 'strip-prefix' ||
+    mappingRule.type === 'strip-suffix'
+  ) {
+    hasMappingRule = mappingRule.values.trim().length > 0
+  } else {
+    hasMappingRule = mappingRule.value.trim().length > 0
+  }
+  const mappingPairs = hasMappingRule ? mappingDerivation.pairs : []
   const result = props.upstream.result
   const hasChanges =
     props.upstream.addModels.length > 0 ||
@@ -232,7 +255,7 @@ function UpstreamUpdateSession(props: UpstreamUpdateDialogProps) {
                     {t('Remove Models')} ({props.upstream.removeModels.length})
                   </TabsTrigger>
                 </TabsList>
-                <TabsContent value='add'>
+                <TabsContent value='add' className='space-y-4'>
                   <UpstreamModelSelection
                     models={props.upstream.addModels}
                     selected={selectedAdd}
@@ -242,6 +265,15 @@ function UpstreamUpdateSession(props: UpstreamUpdateDialogProps) {
                     existingModels={[]}
                     summaryText={t('Add Models')}
                     showChanges={false}
+                  />
+                  <UpstreamUpdateMapping
+                    rule={mappingRule}
+                    onRuleChange={setMappingRule}
+                    derivation={mappingDerivation}
+                    hasRule={hasMappingRule}
+                    syncModels={syncMappingModels}
+                    onSyncModelsChange={setSyncMappingModels}
+                    disabled={props.upstream.applyLoading}
                   />
                 </TabsContent>
                 <TabsContent value='remove' className='space-y-3'>
@@ -298,12 +330,25 @@ function UpstreamUpdateSession(props: UpstreamUpdateDialogProps) {
           await props.upstream.applyUpdates({
             addModels: selectedAdd,
             removeModels: selectedRemove,
+            modelMapping:
+              mappingPairs.length > 0
+                ? Object.fromEntries(
+                    mappingPairs.map((pair) => [pair.from, pair.to])
+                  )
+                : undefined,
+            syncMappingModels,
           })
           setConfirmOpen(false)
         }}
       >
         <ModelChangeList title={t('Add Models')} models={selectedAdd} />
         <ModelChangeList title={t('Remove Models')} models={selectedRemove} />
+        {mappingPairs.length > 0 && (
+          <ModelChangeList
+            title={t('Model Mapping')}
+            models={mappingPairs.map((pair) => `${pair.from} → ${pair.to}`)}
+          />
+        )}
       </ConfirmDialog>
     </>
   )

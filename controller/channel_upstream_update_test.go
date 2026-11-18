@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -477,6 +478,78 @@ func TestApplySelectedModelChanges(t *testing.T) {
 
 		require.Equal(t, []string{"gpt-4o", "gpt-4.1"}, result)
 	})
+}
+
+func TestApplyChannelUpstreamModelUpdatesWithMapping(t *testing.T) {
+	for _, dialect := range []struct {
+		kind string
+		env  string
+	}{{"sqlite", ""}, {"mysql", "TEST_MYSQL_DSN"}, {"postgres", "TEST_POSTGRES_DSN"}} {
+		t.Run(dialect.kind, func(t *testing.T) {
+			if dialect.env != "" && os.Getenv(dialect.env) == "" {
+				t.Skip("set " + dialect.env + " to run this database")
+			}
+			db := modelManagementDB(t, dialect.kind, os.Getenv(dialect.env))
+			existingMapping := `{"existing-alias":"old-upstream"}`
+			channel := &model.Channel{
+				Name:         "mapped channel",
+				Models:       "gpt-old",
+				ModelMapping: &existingMapping,
+			}
+			channel.SetOtherSettings(dto.ChannelOtherSettings{
+				UpstreamModelUpdateLastDetectedModels: []string{"gpt-new", "gpt-extra"},
+				UpstreamModelUpdateLastRemovedModels:  []string{"gpt-old"},
+			})
+			require.NoError(t, db.Create(channel).Error)
+
+			added, removed, remaining, remainingRemove, changed, err := applyChannelUpstreamModelUpdates(
+				channel,
+				[]string{"gpt-new"},
+				nil,
+				[]string{"gpt-old"},
+				map[string]string{"gpt": "gpt-new"},
+				true,
+			)
+			require.NoError(t, err)
+			assert.True(t, changed)
+			assert.Equal(t, []string{"gpt-new"}, added)
+			assert.Equal(t, []string{"gpt-old"}, removed)
+			assert.Equal(t, []string{"gpt-extra"}, remaining)
+			assert.Empty(t, remainingRemove)
+
+			var saved model.Channel
+			require.NoError(t, db.First(&saved, channel.Id).Error)
+			assert.Equal(t, "gpt", saved.Models)
+			require.NotNil(t, saved.ModelMapping)
+			assert.JSONEq(t, `{"existing-alias":"old-upstream","gpt":"gpt-new"}`, *saved.ModelMapping)
+		})
+	}
+}
+
+func TestApplyChannelUpstreamModelUpdatesRejectsUnselectedMappingTarget(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	channel := &model.Channel{Name: "mapped channel", Models: "gpt-existing"}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{
+		UpstreamModelUpdateLastDetectedModels: []string{"gpt-new", "gpt-extra"},
+	})
+	require.NoError(t, db.Create(channel).Error)
+
+	_, _, _, _, changed, err := applyChannelUpstreamModelUpdates(
+		channel,
+		[]string{"gpt-new"},
+		nil,
+		nil,
+		map[string]string{"gpt": "gpt-extra"},
+		true,
+	)
+	require.ErrorContains(t, err, "selected upstream addition")
+	assert.False(t, changed)
+
+	var saved model.Channel
+	require.NoError(t, db.First(&saved, channel.Id).Error)
+	assert.Equal(t, "gpt-existing", saved.Models)
+	assert.Nil(t, saved.ModelMapping)
+	assert.Equal(t, []string{"gpt-new", "gpt-extra"}, saved.GetOtherSettings().UpstreamModelUpdateLastDetectedModels)
 }
 
 func TestCollectPendingApplyUpstreamModelChanges(t *testing.T) {

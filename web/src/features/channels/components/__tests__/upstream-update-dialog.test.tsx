@@ -209,6 +209,48 @@ describe('upstream update preview', () => {
     })
   })
 
+  test('redirect rules are previewed and saved with the selected additions', async () => {
+    const post = vi
+      .spyOn(api, 'post')
+      .mockResolvedValueOnce(detectionResponse)
+      .mockResolvedValueOnce(applyResponse)
+    const user = userEvent.setup()
+    render(<UpstreamUpdateHarness />)
+    await user.click(screen.getByRole('button', { name: 'Detect' }))
+    await user.click(await screen.findByRole('checkbox', { name: 'gpt-extra' }))
+    await user.type(screen.getByLabelText('Suffix'), '-new')
+
+    const preview = screen.getByRole('region', { name: 'Review mappings' })
+    expect(within(preview).getByText('gpt')).toBeVisible()
+    expect(within(preview).getByText('gpt-new')).toBeVisible()
+    await user.click(
+      screen.getByRole('button', { name: 'Review selected changes' })
+    )
+    const confirmation = screen.getByRole('alertdialog')
+    expect(
+      within(
+        within(confirmation).getByRole('region', { name: 'Model Mapping' })
+      ).getByText('gpt → gpt-new')
+    ).toBeVisible()
+    await user.click(
+      within(confirmation).getByRole('button', {
+        name: 'Apply selected changes',
+      })
+    )
+    expect(post).toHaveBeenLastCalledWith(
+      '/api/channel/upstream_updates/apply',
+      {
+        id: 42,
+        add_models: ['gpt-new'],
+        remove_models: [],
+        ignore_models: [],
+        model_mapping: { gpt: 'gpt-new' },
+        sync_mapping_models: true,
+      },
+      expect.anything()
+    )
+  })
+
   test('cancelling the final confirmation returns to the same selection without saving', async () => {
     const post = vi.spyOn(api, 'post').mockResolvedValue(detectionResponse)
     const user = userEvent.setup()
