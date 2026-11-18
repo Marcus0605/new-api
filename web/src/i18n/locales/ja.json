@@ -7797,5 +7797,19 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
     "Zoom": "ズーム"
-  }
+  },
+  "All models allowed": "すべてのモデルを許可",
+  "Select models": "モデルを選択",
+  "Select models individually, by keyword, or by channel. Changes are applied only after confirmation.": "モデルを個別、キーワード、またはチャネルごとに選択できます。変更は確認後にのみ適用されます。",
+  "Apply selection": "選択を適用",
+  "Deselect all": "すべて選択解除",
+  "Filter by keyword": "キーワードで絞り込み",
+  "Enter a model keyword": "モデルのキーワードを入力",
+  "Select matching models": "一致するモデルを選択",
+  "Deselect matching models": "一致するモデルの選択を解除",
+  "{{count}} models match": "{{count}} 個のモデルが一致",
+  "{{selected}} of {{total}} selected": "{{total}} 個中 {{selected}} 個を選択",
+  "Models without channel information": "チャネル情報のないモデル",
+  "Currently unavailable models": "現在利用できないモデル",
+  "These saved models are not currently available. Deselect them to remove their restrictions.": "保存済みのこれらのモデルは現在利用できません。選択を解除すると制限から削除されます。"
 }

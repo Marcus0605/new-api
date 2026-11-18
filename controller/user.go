@@ -642,10 +642,16 @@ func GetUserModels(c *gin.Context) {
 			groupsToQuery = []string{group}
 		}
 	}
+	channels, err := service.GetGroupsEnabledModelChannels(groupsToQuery)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    service.GetGroupsEnabledModels(groupsToQuery),
+		"success":  true,
+		"message":  "",
+		"data":     service.GetGroupsEnabledModels(groupsToQuery),
+		"channels": channels,
 	})
 }
 

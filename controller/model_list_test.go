@@ -30,8 +30,13 @@ type listModelsResponse struct {
 }
 
 type userModelsResponse struct {
-	Success bool     `json:"success"`
-	Data    []string `json:"data"`
+	Success  bool     `json:"success"`
+	Data     []string `json:"data"`
+	Channels []struct {
+		Id     int      `json:"id"`
+		Name   string   `json:"name"`
+		Models []string `json:"models"`
+	} `json:"channels"`
 }
 
 func setupModelListControllerTestDB(t *testing.T) *gorm.DB {
@@ -213,6 +218,46 @@ func TestGetUserModelsFiltersByRequestedGroup(t *testing.T) {
 	GetUserModels(vipContext)
 
 	require.Empty(t, decodeUserModelsResponse(t, vipRecorder))
+}
+
+func TestGetUserModelsIncludesAccessibleChannelGrouping(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.Create(&model.User{
+		Id:       1004,
+		Username: "model-channel-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Channel{
+		{Id: 1, Name: "Channel A"},
+		{Id: 2, Name: "Channel B"},
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: "gpt-a", ChannelId: 1, Enabled: true},
+		{Group: "default", Model: "gpt-b", ChannelId: 1, Enabled: true},
+		{Group: "default", Model: "gpt-a", ChannelId: 2, Enabled: true},
+		{Group: "default", Model: "disabled-model", ChannelId: 2, Enabled: false},
+		{Group: "vip", Model: "vip-only-model", ChannelId: 2, Enabled: true},
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/user/models?group=default", nil)
+	context.Set("id", 1004)
+
+	GetUserModels(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload userModelsResponse
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.True(t, payload.Success)
+	assert.ElementsMatch(t, []string{"gpt-a", "gpt-b"}, payload.Data)
+	require.Len(t, payload.Channels, 2)
+	assert.Equal(t, "Channel A", payload.Channels[0].Name)
+	assert.Equal(t, []string{"gpt-a", "gpt-b"}, payload.Channels[0].Models)
+	assert.Equal(t, "Channel B", payload.Channels[1].Name)
+	assert.Equal(t, []string{"gpt-a"}, payload.Channels[1].Models)
 }
 
 func TestGetUserModelsExpandsAutoGroupsInConfiguredOrder(t *testing.T) {

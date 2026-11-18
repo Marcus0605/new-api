@@ -7797,5 +7797,19 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "All models allowed": "Cho phép tất cả mô hình",
+  "Select models": "Chọn mô hình",
+  "Select models individually, by keyword, or by channel. Changes are applied only after confirmation.": "Chọn mô hình theo từng mục, từ khóa hoặc kênh. Thay đổi chỉ được áp dụng sau khi xác nhận.",
+  "Apply selection": "Áp dụng lựa chọn",
+  "Deselect all": "Bỏ chọn tất cả",
+  "Filter by keyword": "Lọc theo từ khóa",
+  "Enter a model keyword": "Nhập từ khóa mô hình",
+  "Select matching models": "Chọn các mô hình phù hợp",
+  "Deselect matching models": "Bỏ chọn các mô hình phù hợp",
+  "{{count}} models match": "{{count}} mô hình phù hợp",
+  "{{selected}} of {{total}} selected": "Đã chọn {{selected}} / {{total}}",
+  "Models without channel information": "Mô hình không có thông tin kênh",
+  "Currently unavailable models": "Mô hình hiện không khả dụng",
+  "These saved models are not currently available. Deselect them to remove their restrictions.": "Các mô hình đã lưu này hiện không khả dụng. Bỏ chọn để xóa các giới hạn tương ứng."
 }

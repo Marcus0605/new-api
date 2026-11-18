@@ -7797,5 +7797,19 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "All models allowed": "Tous les modèles sont autorisés",
+  "Select models": "Sélectionner des modèles",
+  "Select models individually, by keyword, or by channel. Changes are applied only after confirmation.": "Sélectionnez les modèles individuellement, par mot-clé ou par canal. Les modifications ne sont appliquées qu’après confirmation.",
+  "Apply selection": "Appliquer la sélection",
+  "Deselect all": "Tout désélectionner",
+  "Filter by keyword": "Filtrer par mot-clé",
+  "Enter a model keyword": "Saisissez un mot-clé de modèle",
+  "Select matching models": "Sélectionner les modèles correspondants",
+  "Deselect matching models": "Désélectionner les modèles correspondants",
+  "{{count}} models match": "{{count}} modèles correspondent",
+  "{{selected}} of {{total}} selected": "{{selected}} sur {{total}} sélectionnés",
+  "Models without channel information": "Modèles sans information de canal",
+  "Currently unavailable models": "Modèles actuellement indisponibles",
+  "These saved models are not currently available. Deselect them to remove their restrictions.": "Ces modèles enregistrés sont actuellement indisponibles. Désélectionnez-les pour supprimer leurs restrictions."
 }

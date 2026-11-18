@@ -48,10 +48,17 @@ export async function getSelf() {
   return res.data
 }
 
+export type UserModelChannel = {
+  id: number
+  name: string
+  models: string[]
+}
+
 export async function getUserModels(): Promise<{
   success: boolean
   message?: string
   data?: string[]
+  channels?: UserModelChannel[]
 }> {
   const res = await api.get('/api/user/models')
   return res.data

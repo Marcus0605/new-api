@@ -34,7 +34,6 @@ import {
   sideDrawerHeaderClassName,
   sideDrawerSwitchItemClassName,
 } from '@/components/drawer-layout'
-import { MultiSelect } from '@/components/multi-select'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -94,6 +93,7 @@ import {
 } from './api-key-group-combobox'
 import { useApiKeys } from './api-keys-provider'
 import { AutoGroupOrderEditor } from './auto-group-order-editor'
+import { ModelLimitsSelector } from './model-limits-selector'
 
 type ApiKeyMutateDrawerProps = {
   open: boolean
@@ -700,16 +700,11 @@ export function ApiKeysMutateDrawer({
                         <FormItem>
                           <FormLabel>{t('Model Limits')}</FormLabel>
                           <FormControl>
-                            <MultiSelect
-                              options={models.map((m) => ({
-                                label: m,
-                                value: m,
-                              }))}
-                              selected={field.value}
+                            <ModelLimitsSelector
+                              models={models}
+                              channels={modelsData?.channels || []}
+                              value={field.value}
                               onChange={field.onChange}
-                              placeholder={t(
-                                'Select models (empty for allow all)'
-                              )}
                             />
                           </FormControl>
                           <FormDescription>

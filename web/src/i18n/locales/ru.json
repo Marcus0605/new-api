@@ -7797,5 +7797,19 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "All models allowed": "Разрешены все модели",
+  "Select models": "Выбрать модели",
+  "Select models individually, by keyword, or by channel. Changes are applied only after confirmation.": "Выбирайте модели по отдельности, по ключевому слову или по каналу. Изменения применяются только после подтверждения.",
+  "Apply selection": "Применить выбор",
+  "Deselect all": "Снять весь выбор",
+  "Filter by keyword": "Фильтр по ключевому слову",
+  "Enter a model keyword": "Введите ключевое слово модели",
+  "Select matching models": "Выбрать подходящие модели",
+  "Deselect matching models": "Снять выбор с подходящих моделей",
+  "{{count}} models match": "Совпадений: {{count}}",
+  "{{selected}} of {{total}} selected": "Выбрано {{selected}} из {{total}}",
+  "Models without channel information": "Модели без информации о канале",
+  "Currently unavailable models": "Текущие недоступные модели",
+  "These saved models are not currently available. Deselect them to remove their restrictions.": "Эти сохранённые модели сейчас недоступны. Снимите выбор, чтобы удалить соответствующие ограничения."
 }

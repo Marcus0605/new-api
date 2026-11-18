@@ -55,7 +55,19 @@ function installApiFixtures(createdPayloads: Array<Record<string, unknown>>) {
       case '/api/status':
         return { data: { data: { default_use_auto_group: true } } }
       case '/api/user/models':
-        return { data: { success: true, data: [] } }
+        return {
+          data: {
+            success: true,
+            data: ['gpt-4o', 'claude-sonnet'],
+            channels: [
+              {
+                id: 1,
+                name: 'Channel A',
+                models: ['gpt-4o', 'claude-sonnet'],
+              },
+            ],
+          },
+        }
       case '/api/user/self/groups':
         return {
           data: {
@@ -98,7 +110,17 @@ async function renderCreateDrawer(): Promise<void> {
   )
   queryClient.setQueryData(
     ['user-models'],
-    { success: true, data: [] },
+    {
+      success: true,
+      data: ['gpt-4o', 'claude-sonnet'],
+      channels: [
+        {
+          id: 1,
+          name: 'Channel A',
+          models: ['gpt-4o', 'claude-sonnet'],
+        },
+      ],
+    },
     { updatedAt: freshAt }
   )
   queryClient.setQueryData(
@@ -278,6 +300,27 @@ describe('API keys mutate drawer Auto group integration', () => {
     fireEvent.click(findButton('Save changes', true))
     await waitFor(() => expect(createdPayloads).toHaveLength(1))
     expect(createdPayloads[0]?.auto_groups).toEqual(['vip'])
+  })
+})
+
+describe('API keys mutate drawer model limits integration', () => {
+  test('applies dialog selections to the create-key payload', async () => {
+    const createdPayloads: Array<Record<string, unknown>> = []
+    installApiFixtures(createdPayloads)
+    await renderCreateDrawer()
+
+    fireEvent.click(findButton('Advanced Settings', true))
+    fireEvent.click(findButton('Select models', true))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'gpt-4o' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply selection' }))
+    changeInput(getControlByLabel('Name'), 'limited-key')
+    fireEvent.click(findButton('Save changes', true))
+
+    await waitFor(() => expect(createdPayloads).toHaveLength(1))
+    expect(createdPayloads[0]).toMatchObject({
+      model_limits_enabled: true,
+      model_limits: 'gpt-4o',
+    })
   })
 })
 

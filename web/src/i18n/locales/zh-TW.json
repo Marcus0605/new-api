@@ -7797,5 +7797,19 @@
     "Zhipu GLM": "智譜GLM",
     "Zhipu V4": "智譜 V4",
     "Zoom": "縮放"
-  }
+  },
+  "All models allowed": "允許所有模型",
+  "Select models": "選擇模型",
+  "Select models individually, by keyword, or by channel. Changes are applied only after confirmation.": "可逐個、按關鍵字或按渠道選擇模型。更改僅在確認後套用。",
+  "Apply selection": "套用選擇",
+  "Deselect all": "全不選",
+  "Filter by keyword": "按關鍵字篩選",
+  "Enter a model keyword": "輸入模型關鍵字",
+  "Select matching models": "選擇符合模型",
+  "Deselect matching models": "取消選擇符合模型",
+  "{{count}} models match": "符合 {{count}} 個模型",
+  "{{selected}} of {{total}} selected": "已選擇 {{selected}} / {{total}} 個",
+  "Models without channel information": "無渠道資訊的模型",
+  "Currently unavailable models": "目前不可用的模型",
+  "These saved models are not currently available. Deselect them to remove their restrictions.": "這些已儲存的模型目前不可用。取消選擇即可移除對應限制。"
 }

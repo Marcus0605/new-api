@@ -122,6 +122,35 @@ func GetGroupsEnabledModels(groups []string) []string {
 	return models
 }
 
+type UserModelChannel struct {
+	Id     int      `json:"id"`
+	Name   string   `json:"name"`
+	Models []string `json:"models"`
+}
+
+func GetGroupsEnabledModelChannels(groups []string) ([]UserModelChannel, error) {
+	rows, err := model.GetGroupsEnabledModelChannels(groups)
+	if err != nil {
+		return nil, err
+	}
+	channels := make([]UserModelChannel, 0)
+	channelIndexes := make(map[int]int)
+	for _, row := range rows {
+		index, ok := channelIndexes[row.ChannelId]
+		if !ok {
+			index = len(channels)
+			channelIndexes[row.ChannelId] = index
+			channels = append(channels, UserModelChannel{
+				Id:     row.ChannelId,
+				Name:   row.ChannelName,
+				Models: make([]string, 0),
+			})
+		}
+		channels[index].Models = append(channels[index].Models, row.Model)
+	}
+	return channels, nil
+}
+
 // GetUserGroupRatio 获取用户使用某个分组的倍率
 // userGroup 用户分组
 // group 需要获取倍率的分组
