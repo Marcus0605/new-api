@@ -26,31 +26,42 @@ import {
 } from '@/components/data-table'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { calculateModelUsageStats } from '@/features/dashboard/lib'
+import {
+  calculateKeyUsageStats,
+  calculateModelUsageStats,
+} from '@/features/dashboard/lib/stats'
 import type {
   DashboardLogStats,
-  DashboardModelUsage,
+  DashboardUsageStats,
   QuotaDataItem,
 } from '@/features/dashboard/types'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatCompactNumber, formatNumber, formatPercent } from '@/lib/format'
 
-interface ModelUsageTableProps {
+interface UsageRankingTableProps {
+  variant: 'model' | 'key'
   data: QuotaDataItem[]
   logStats?: DashboardLogStats
   loading: boolean
 }
 
-export function ModelUsageTable(props: ModelUsageTableProps) {
+export function UsageRankingTable(props: UsageRankingTableProps) {
   const { t, i18n } = useTranslation()
   const titleId = useId()
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const rows = useMemo(
-    () => calculateModelUsageStats(props.data, props.logStats),
-    [props.data, props.logStats]
+    () =>
+      props.variant === 'model'
+        ? calculateModelUsageStats(props.data, props.logStats)
+        : calculateKeyUsageStats(props.logStats),
+    [props.variant, props.data, props.logStats]
   )
+  const title =
+    props.variant === 'model'
+      ? t('Model Consumption Ranking')
+      : t('Key Consumption Ranking')
 
-  const columns = useMemo<StaticDataTableColumn<DashboardModelUsage>[]>(() => {
+  const columns = useMemo<StaticDataTableColumn<DashboardUsageStats>[]>(() => {
     const numericHeader = 'text-right text-xs font-medium whitespace-nowrap'
     const numericCell = 'py-2 text-right font-mono text-xs'
     const tokenCell = (value: number) => (
@@ -68,11 +79,15 @@ export function ModelUsageTable(props: ModelUsageTableProps) {
         cell: (_row, index) => index + 1,
       },
       {
-        id: 'model',
-        header: t('Model'),
+        id: 'dimension',
+        header: props.variant === 'model' ? t('Model') : t('API Key'),
         className: 'min-w-52 text-xs font-medium',
         cellClassName: 'min-w-52 max-w-72 py-2 font-mono text-xs',
-        cell: (row) => row.modelName || t('Unknown'),
+        cell: (row) =>
+          row.name ||
+          (props.variant === 'key'
+            ? `${t('API Key')} #${row.id}`
+            : t('Unknown')),
       },
       {
         id: 'requests',
@@ -116,8 +131,22 @@ export function ModelUsageTable(props: ModelUsageTableProps) {
         cellClassName: numericCell,
         cell: (row) => formatPercent(row.inputCacheHitRate),
       },
+      {
+        id: 'failures',
+        header: t('Failures'),
+        className: numericHeader,
+        cellClassName: numericCell,
+        cell: (row) => formatNumber(row.failedCount, locale),
+      },
+      {
+        id: 'success-rate',
+        header: t('Success rate'),
+        className: numericHeader,
+        cellClassName: numericCell,
+        cell: (row) => formatPercent(row.successRate),
+      },
     ]
-  }, [locale, t])
+  }, [locale, props.variant, t])
 
   return (
     <section
@@ -129,7 +158,7 @@ export function ModelUsageTable(props: ModelUsageTableProps) {
           <ListOrdered />
         </IconBadge>
         <h2 id={titleId} className='text-xs font-semibold'>
-          {t('Model Consumption Ranking')}
+          {title}
         </h2>
       </div>
       {props.loading ? (
@@ -142,7 +171,7 @@ export function ModelUsageTable(props: ModelUsageTableProps) {
         <StaticDataTable
           data={rows}
           columns={columns}
-          getRowKey={(row) => row.modelName}
+          getRowKey={(row) => row.id}
           className='focus-visible:ring-ring max-h-80 overflow-auto rounded-none border-0 focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset'
           containerProps={{
             role: 'region',
@@ -150,7 +179,7 @@ export function ModelUsageTable(props: ModelUsageTableProps) {
             'aria-labelledby': titleId,
           }}
           tableProps={{ withContainer: false }}
-          tableClassName='min-w-[52rem] [&_tbody>tr]:h-9 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-background'
+          tableClassName='min-w-[64rem] [&_tbody>tr]:h-9 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-background'
           headerRowClassName='hover:bg-transparent'
           emptyContent={t('No data available')}
           emptyClassName='text-muted-foreground h-20 text-xs'

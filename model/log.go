@@ -692,6 +692,15 @@ type ModelStat struct {
 	ModelName        string `json:"model_name"`
 	PromptTokens     int64  `json:"prompt_tokens"`
 	CompletionTokens int64  `json:"completion_tokens"`
+	FailedCount      int64  `json:"failed_count"`
+}
+
+type TokenStat struct {
+	TokenID          int    `json:"token_id"`
+	TokenName        string `json:"token_name"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+	FailedCount      int64  `json:"failed_count"`
 }
 
 type Stat struct {
@@ -701,6 +710,7 @@ type Stat struct {
 	PromptTokens     int64       `json:"prompt_tokens"`
 	CompletionTokens int64       `json:"completion_tokens"`
 	Models           []ModelStat `json:"models" gorm:"-"`
+	Tokens           []TokenStat `json:"tokens" gorm:"-"`
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string, tokenID int) (stat Stat, err error) {
@@ -723,13 +733,21 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	if err != nil {
 		return stat, err
 	}
-	modelQuery, err := filter.apply(LOG_DB.Table("logs").Select("logs.model_name, COALESCE(sum(prompt_tokens), 0) prompt_tokens, COALESCE(sum(completion_tokens), 0) completion_tokens"))
+	statsFilter := filter
+	statsFilter.Type = LogTypeUnknown
+	modelQuery, err := statsFilter.apply(LOG_DB.Table("logs").Select("logs.model_name, COALESCE(sum(logs.prompt_tokens), 0) prompt_tokens, COALESCE(sum(logs.completion_tokens), 0) completion_tokens, COALESCE(sum(CASE WHEN logs.type = ? THEN 1 ELSE 0 END), 0) failed_count", LogTypeError))
+	if err != nil {
+		return stat, err
+	}
+	tokenQuery, err := statsFilter.apply(LOG_DB.Table("logs").Select("logs.token_id, COALESCE(max(logs.token_name), '') token_name, COALESCE(sum(logs.prompt_tokens), 0) prompt_tokens, COALESCE(sum(logs.completion_tokens), 0) completion_tokens, COALESCE(sum(CASE WHEN logs.type = ? THEN 1 ELSE 0 END), 0) failed_count", LogTypeError))
 	if err != nil {
 		return stat, err
 	}
 
 	// 只统计最近60秒的rpm和tpm
 	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
+	modelQuery = modelQuery.Where("logs.type IN ?", []int{LogTypeConsume, LogTypeError})
+	tokenQuery = tokenQuery.Where("logs.type IN ?", []int{LogTypeConsume, LogTypeError})
 
 	if err := tx.Scan(&stat).Error; err != nil {
 		common.SysError(common.LogText("failed to query log stat: %s", err.Error()))
@@ -748,6 +766,11 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	stat.Models = make([]ModelStat, 0)
 	if err := modelQuery.Group("logs.model_name").Scan(&stat.Models).Error; err != nil {
 		common.SysError(common.LogText("failed to query model log stats: %s", err.Error()))
+		return stat, common.NewMessage("Failed to query statistics")
+	}
+	stat.Tokens = make([]TokenStat, 0)
+	if err := tokenQuery.Group("logs.token_id").Scan(&stat.Tokens).Error; err != nil {
+		common.SysError(common.LogText("failed to query token log stats: %s", err.Error()))
 		return stat, common.NewMessage("Failed to query statistics")
 	}
 

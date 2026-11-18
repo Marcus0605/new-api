@@ -137,11 +137,11 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	seedFlowLookupData(t)
 	seedFlowQuotaData(t, QuotaData{
 		UserID: 1, Username: "alice", TokenID: 11, UseGroup: "default",
-		ModelName: "gpt-a", CreatedAt: 1000, Count: 1, TokenUsed: 15,
+		ModelName: "gpt-a", CreatedAt: 1000, Count: 1, TokenUsed: 15, CacheReadTokens: 6,
 	})
 	seedFlowQuotaData(t, QuotaData{
 		UserID: 1, Username: "alice", TokenID: 22, UseGroup: "default",
-		ModelName: "gpt-a", CreatedAt: 1000, Count: 2, TokenUsed: 27,
+		ModelName: "gpt-a", CreatedAt: 1000, Count: 2, TokenUsed: 27, CacheReadTokens: 9,
 	})
 	require.NoError(t, DB.Create(&Log{
 		UserId: 1, Username: "alice", TokenId: 11, TokenName: "shared",
@@ -158,6 +158,16 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 		ModelName: "gpt-b", CreatedAt: 1000, Type: LogTypeConsume,
 		PromptTokens: 4, CompletionTokens: 3,
 	}).Error)
+	require.NoError(t, DB.Create(&Log{
+		UserId: 1, Username: "alice", TokenId: 11, TokenName: "shared",
+		ModelName: "gpt-a", CreatedAt: 1000, Type: LogTypeError,
+	}).Error)
+	for range 2 {
+		require.NoError(t, DB.Create(&Log{
+			UserId: 1, Username: "alice", TokenId: 22, TokenName: "shared",
+			ModelName: "gpt-b", CreatedAt: 1000, Type: LogTypeError,
+		}).Error)
+	}
 
 	allRows, err := GetAllQuotaDates(900, 2000, "", 11)
 	require.NoError(t, err)
@@ -173,7 +183,8 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(10), stat.PromptTokens)
 	require.Equal(t, int64(5), stat.CompletionTokens)
-	require.Equal(t, []ModelStat{{ModelName: "gpt-a", PromptTokens: 10, CompletionTokens: 5}}, stat.Models)
+	require.Equal(t, []ModelStat{{ModelName: "gpt-a", PromptTokens: 10, CompletionTokens: 5, FailedCount: 1}}, stat.Models)
+	require.Equal(t, []TokenStat{{TokenID: 11, TokenName: "shared", PromptTokens: 10, CompletionTokens: 5, FailedCount: 1}}, stat.Tokens)
 
 	allStat, err := SumUsedQuota(LogTypeConsume, 900, 2000, "", "alice", "shared", 0, "", 0)
 	require.NoError(t, err)
@@ -182,8 +193,25 @@ func TestDashboardQueriesFilterByTokenID(t *testing.T) {
 	for _, modelStat := range allStat.Models {
 		modelStats[modelStat.ModelName] = modelStat
 	}
-	require.Equal(t, ModelStat{ModelName: "gpt-a", PromptTokens: 30, CompletionTokens: 12}, modelStats["gpt-a"])
-	require.Equal(t, ModelStat{ModelName: "gpt-b", PromptTokens: 4, CompletionTokens: 3}, modelStats["gpt-b"])
+	require.Equal(t, ModelStat{ModelName: "gpt-a", PromptTokens: 30, CompletionTokens: 12, FailedCount: 1}, modelStats["gpt-a"])
+	require.Equal(t, ModelStat{ModelName: "gpt-b", PromptTokens: 4, CompletionTokens: 3, FailedCount: 2}, modelStats["gpt-b"])
+	require.Len(t, allStat.Tokens, 2)
+	tokenStats := make(map[int]TokenStat, len(allStat.Tokens))
+	for _, tokenStat := range allStat.Tokens {
+		tokenStats[tokenStat.TokenID] = tokenStat
+	}
+	require.Equal(t, TokenStat{TokenID: 11, TokenName: "shared", PromptTokens: 10, CompletionTokens: 5, FailedCount: 1}, tokenStats[11])
+	require.Equal(t, TokenStat{TokenID: 22, TokenName: "shared", PromptTokens: 24, CompletionTokens: 10, FailedCount: 2}, tokenStats[22])
+
+	tokenQuota, err := GetTokenQuotaStats(900, 2000, "alice", 0)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []TokenQuotaStat{
+		{TokenID: 11, RequestCount: 1, TotalTokens: 15, CacheReadTokens: 6},
+		{TokenID: 22, RequestCount: 2, TotalTokens: 27, CacheReadTokens: 9},
+	}, tokenQuota)
+	filteredTokenQuota, err := GetTokenQuotaStats(900, 2000, "alice", 11)
+	require.NoError(t, err)
+	require.Equal(t, []TokenQuotaStat{{TokenID: 11, RequestCount: 1, TotalTokens: 15, CacheReadTokens: 6}}, filteredTokenQuota)
 
 	rootRows, err := GetFlowQuotaData(900, 2000, "", 0, common.RoleRootUser, 11)
 	require.NoError(t, err)

@@ -86,9 +86,9 @@ const LazyLogStatCards = lazy(() =>
   }))
 )
 
-const LazyModelUsageTable = lazy(() =>
-  import('./components/models/model-usage-table').then((m) => ({
-    default: m.ModelUsageTable,
+const LazyUsageRankingTable = lazy(() =>
+  import('./components/usage-ranking-table').then((m) => ({
+    default: m.UsageRankingTable,
   }))
 )
 
@@ -151,7 +151,7 @@ function LogStatCardsFallback() {
   )
 }
 
-function ModelUsageTableFallback() {
+function UsageRankingTableFallback() {
   return (
     <div className='overflow-hidden rounded-lg border'>
       <div className='border-b px-4 py-2.5'>
@@ -215,6 +215,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   },
   users: {
     titleKey: 'User Analytics',
+  },
+  keys: {
+    titleKey: 'Client Key Statistics',
   },
 }
 
@@ -293,17 +296,25 @@ export function Dashboard() {
   const showSectionTabs =
     activeSection !== 'overview' && visibleSections.length > 1
   const modelActions =
-    activeSection === 'models' ? (
+    activeSection === 'models' || activeSection === 'keys' ? (
       <>
-        <ModelsChartPreferences
-          preferences={chartPreferences}
-          onPreferencesChange={handleChartPreferencesChange}
-        />
+        {activeSection === 'models' && (
+          <ModelsChartPreferences
+            preferences={chartPreferences}
+            onPreferencesChange={handleChartPreferencesChange}
+          />
+        )}
         <ModelsFilter
           preferences={chartPreferences}
           currentFilters={modelFilters}
           onFilterChange={handleFilterChange}
           onReset={handleResetFilters}
+          titleKey={activeSection === 'keys' ? 'Client Key Filters' : undefined}
+          descriptionKey={
+            activeSection === 'keys'
+              ? 'Filter client key statistics by time range, user, and API key.'
+              : undefined
+          }
         />
       </>
     ) : null
@@ -358,9 +369,13 @@ export function Dashboard() {
           <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
             {showSectionTabs ? (
               <Tabs value={activeSection} onValueChange={handleSectionChange}>
-                <TabsList className='max-w-full flex-wrap justify-start group-data-horizontal/tabs:h-auto'>
+                <TabsList className='max-w-full flex-nowrap justify-start overflow-x-auto group-data-horizontal/tabs:h-auto'>
                   {visibleSections.map((section) => (
-                    <TabsTrigger key={section} value={section}>
+                    <TabsTrigger
+                      key={section}
+                      value={section}
+                      className='shrink-0'
+                    >
                       {t(SECTION_META[section].titleKey)}
                     </TabsTrigger>
                   ))}
@@ -386,8 +401,9 @@ export function Dashboard() {
                 </Suspense>
               </FadeIn>
               <FadeIn delay={0.05}>
-                <Suspense fallback={<ModelUsageTableFallback />}>
-                  <LazyModelUsageTable
+                <Suspense fallback={<UsageRankingTableFallback />}>
+                  <LazyUsageRankingTable
+                    variant='model'
                     data={modelData}
                     logStats={modelLogStats}
                     loading={dataLoading}
@@ -424,6 +440,28 @@ export function Dashboard() {
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
                     }
+                  />
+                </Suspense>
+              </FadeIn>
+            </>
+          )}
+          {activeSection === 'keys' && (
+            <>
+              <FadeIn>
+                <Suspense fallback={<LogStatCardsFallback />}>
+                  <LazyLogStatCards
+                    filters={modelFilters}
+                    onDataUpdate={handleDataUpdate}
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.05}>
+                <Suspense fallback={<UsageRankingTableFallback />}>
+                  <LazyUsageRankingTable
+                    variant='key'
+                    data={modelData}
+                    logStats={modelLogStats}
+                    loading={dataLoading}
                   />
                 </Suspense>
               </FadeIn>

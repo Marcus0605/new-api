@@ -39,22 +39,43 @@ export interface DashboardModelLogStats {
   model_name: string
   prompt_tokens?: number
   completion_tokens?: number
+  failed_count?: number
+}
+
+export interface DashboardTokenLogStats {
+  token_id: number
+  token_name?: string
+  prompt_tokens?: number
+  completion_tokens?: number
+  failed_count?: number
+}
+
+export interface DashboardTokenQuotaStats {
+  token_id: number
+  request_count?: number
+  total_tokens?: number
+  cache_read_tokens?: number
 }
 
 export interface DashboardLogStats {
   prompt_tokens?: number
   completion_tokens?: number
   models?: DashboardModelLogStats[]
+  tokens?: DashboardTokenLogStats[]
+  token_quota?: DashboardTokenQuotaStats[]
 }
 
-export interface DashboardModelUsage {
-  modelName: string
+export interface DashboardUsageStats {
+  id: string
+  name: string
   requestCount: number
   totalTokens: number
   promptTokens: number
   completionTokens: number
   cacheReadTokens: number
   inputCacheHitRate: number
+  failedCount: number
+  successRate: number
 }
 
 export interface FlowQuotaDataItem {

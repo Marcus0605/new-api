@@ -44,5 +44,6 @@ export {
   safeDivide,
   calculateDashboardStats,
   calculateModelUsageStats,
+  calculateKeyUsageStats,
 } from './stats'
 export { getPreviewText } from './text'

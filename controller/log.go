@@ -215,6 +215,11 @@ func GetLogsStat(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	tokenQuota, err := model.GetTokenQuotaStats(startTimestamp, endTimestamp, username, tokenID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, "")
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -226,6 +231,8 @@ func GetLogsStat(c *gin.Context) {
 			"prompt_tokens":     stat.PromptTokens,
 			"completion_tokens": stat.CompletionTokens,
 			"models":            stat.Models,
+			"tokens":            stat.Tokens,
+			"token_quota":       tokenQuota,
 		},
 	})
 	return
@@ -253,6 +260,11 @@ func GetLogsSelfStat(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	tokenQuota, err := model.GetTokenQuotaStats(startTimestamp, endTimestamp, username, tokenID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
 	c.JSON(200, gin.H{
 		"success": true,
@@ -264,6 +276,8 @@ func GetLogsSelfStat(c *gin.Context) {
 			"prompt_tokens":     quotaNum.PromptTokens,
 			"completion_tokens": quotaNum.CompletionTokens,
 			"models":            quotaNum.Models,
+			"tokens":            quotaNum.Tokens,
+			"token_quota":       tokenQuota,
 			//"token": tokenNum,
 		},
 	})

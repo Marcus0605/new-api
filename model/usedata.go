@@ -27,6 +27,13 @@ type QuotaData struct {
 	CacheCreationTokens int64  `json:"cache_creation_tokens" gorm:"default:0"`
 }
 
+type TokenQuotaStat struct {
+	TokenID         int   `json:"token_id"`
+	RequestCount    int64 `json:"request_count"`
+	TotalTokens     int64 `json:"total_tokens"`
+	CacheReadTokens int64 `json:"cache_read_tokens"`
+}
+
 type QuotaDataLogParams struct {
 	UserID              int
 	Username            string
@@ -198,4 +205,22 @@ func GetAllQuotaDates(startTime int64, endTime int64, username string, tokenID i
 	}
 	err = query.Group("model_name, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+func GetTokenQuotaStats(startTime int64, endTime int64, username string, tokenID int) ([]TokenQuotaStat, error) {
+	stats := make([]TokenQuotaStat, 0)
+	query := DB.Table("quota_data").
+		Select("token_id, COALESCE(sum(count), 0) request_count, COALESCE(sum(token_used), 0) total_tokens, COALESCE(sum(cache_read_tokens), 0) cache_read_tokens").
+		Where("created_at >= ? AND created_at <= ?", startTime, endTime)
+	if username != "" {
+		query = query.Where("username = ?", username)
+	}
+	if tokenID != 0 {
+		query = query.Where("token_id = ?", tokenID)
+	}
+	if err := query.Group("token_id").Scan(&stats).Error; err != nil {
+		common.SysError(common.LogText("failed to query token quota stats: %s", err.Error()))
+		return nil, common.NewMessage("Failed to query statistics")
+	}
+	return stats, nil
 }

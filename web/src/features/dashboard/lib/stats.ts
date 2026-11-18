@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type {
   DashboardLogStats,
-  DashboardModelUsage,
+  DashboardUsageStats,
   QuotaDataItem,
 } from '@/features/dashboard/types'
 
@@ -36,27 +36,51 @@ export function safeDivide(
   return Math.round(result * factor) / factor
 }
 
-/**
- * Aggregate request, token, and cache usage for each model.
- */
+function emptyUsageStats(id: string, name: string): DashboardUsageStats {
+  return {
+    id,
+    name,
+    requestCount: 0,
+    totalTokens: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    cacheReadTokens: 0,
+    inputCacheHitRate: 0,
+    failedCount: 0,
+    successRate: 0,
+  }
+}
+
+function finalizeUsageStats(
+  rows: Map<string, DashboardUsageStats>
+): DashboardUsageStats[] {
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      inputCacheHitRate:
+        safeDivide(row.cacheReadTokens, row.promptTokens) * 100,
+      successRate:
+        safeDivide(row.requestCount, row.requestCount + row.failedCount) * 100,
+    }))
+    .sort(
+      (a, b) =>
+        b.totalTokens - a.totalTokens ||
+        b.requestCount - a.requestCount ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id)
+    )
+}
+
 export function calculateModelUsageStats(
   data: QuotaDataItem[],
   logStats?: DashboardLogStats
-): DashboardModelUsage[] {
-  const rows = new Map<string, DashboardModelUsage>()
+): DashboardUsageStats[] {
+  const rows = new Map<string, DashboardUsageStats>()
 
   for (const item of data) {
     const modelName = item.model_name || ''
     const cacheRead = Number(item.cache_read_tokens) || 0
-    const current = rows.get(modelName) ?? {
-      modelName,
-      requestCount: 0,
-      totalTokens: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      cacheReadTokens: 0,
-      inputCacheHitRate: 0,
-    }
+    const current = rows.get(modelName) ?? emptyUsageStats(modelName, modelName)
     current.requestCount += Number(item.count) || 0
     current.totalTokens += Number(item.token_used) || 0
     current.cacheReadTokens += Number.isFinite(cacheRead)
@@ -66,32 +90,52 @@ export function calculateModelUsageStats(
   }
 
   for (const model of logStats?.models ?? []) {
-    const current = rows.get(model.model_name) ?? {
-      modelName: model.model_name,
-      requestCount: 0,
-      totalTokens: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      cacheReadTokens: 0,
-      inputCacheHitRate: 0,
-    }
+    const current =
+      rows.get(model.model_name) ??
+      emptyUsageStats(model.model_name, model.model_name)
     current.promptTokens = Number(model.prompt_tokens) || 0
     current.completionTokens = Number(model.completion_tokens) || 0
+    current.failedCount = Number(model.failed_count) || 0
+    if (!current.totalTokens) {
+      current.totalTokens = current.promptTokens + current.completionTokens
+    }
     rows.set(model.model_name, current)
   }
 
-  return [...rows.values()]
-    .map((row) => ({
-      ...row,
-      inputCacheHitRate:
-        safeDivide(row.cacheReadTokens, row.promptTokens) * 100,
-    }))
-    .sort(
-      (a, b) =>
-        b.totalTokens - a.totalTokens ||
-        b.requestCount - a.requestCount ||
-        a.modelName.localeCompare(b.modelName)
-    )
+  return finalizeUsageStats(rows)
+}
+
+export function calculateKeyUsageStats(
+  logStats?: DashboardLogStats
+): DashboardUsageStats[] {
+  const rows = new Map<string, DashboardUsageStats>()
+
+  for (const token of logStats?.token_quota ?? []) {
+    const id = String(token.token_id)
+    const cacheRead = Number(token.cache_read_tokens) || 0
+    const current = emptyUsageStats(id, '')
+    current.requestCount = Number(token.request_count) || 0
+    current.totalTokens = Number(token.total_tokens) || 0
+    current.cacheReadTokens = Number.isFinite(cacheRead)
+      ? Math.max(0, cacheRead)
+      : 0
+    rows.set(id, current)
+  }
+
+  for (const token of logStats?.tokens ?? []) {
+    const id = String(token.token_id)
+    const current = rows.get(id) ?? emptyUsageStats(id, '')
+    current.name = token.token_name || ''
+    current.promptTokens = Number(token.prompt_tokens) || 0
+    current.completionTokens = Number(token.completion_tokens) || 0
+    current.failedCount = Number(token.failed_count) || 0
+    if (!current.totalTokens) {
+      current.totalTokens = current.promptTokens + current.completionTokens
+    }
+    rows.set(id, current)
+  }
+
+  return finalizeUsageStats(rows)
 }
 
 /**
