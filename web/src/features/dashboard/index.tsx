@@ -369,7 +369,7 @@ export function Dashboard() {
           <div className='flex flex-wrap items-center justify-between gap-1.5 sm:gap-2'>
             {showSectionTabs ? (
               <Tabs value={activeSection} onValueChange={handleSectionChange}>
-                <TabsList className='max-w-full flex-nowrap justify-start overflow-x-auto group-data-horizontal/tabs:h-auto'>
+                <TabsList className='max-w-full flex-nowrap justify-start overflow-x-auto overflow-y-hidden group-data-horizontal/tabs:h-auto'>
                   {visibleSections.map((section) => (
                     <TabsTrigger
                       key={section}
@@ -450,6 +450,7 @@ export function Dashboard() {
               <FadeIn>
                 <Suspense fallback={<LogStatCardsFallback />}>
                   <LazyLogStatCards
+                    variant='key'
                     filters={modelFilters}
                     onDataUpdate={handleDataUpdate}
                   />

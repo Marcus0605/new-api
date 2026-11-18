@@ -50,6 +50,8 @@ describe('dashboard model statistics', () => {
       totalCacheReadTokens: 75,
       totalPromptTokens: 300,
       totalCompletionTokens: 100,
+      totalAuthorizedModels: 0,
+      totalKeys: 0,
       inputCacheHitRate: 25,
     })
   })
@@ -157,6 +159,71 @@ describe('dashboard model statistics', () => {
 })
 
 describe('dashboard client key statistics', () => {
+  test('counts every key and each authorized model only once', () => {
+    const result = calculateDashboardStats([], {
+      token_catalog: [
+        {
+          token_id: 11,
+          token_name: 'first',
+          authorized_models: ['gpt-a', 'gpt-b'],
+        },
+        {
+          token_id: 22,
+          token_name: 'second',
+          authorized_models: ['gpt-a'],
+        },
+        {
+          token_id: 33,
+          token_name: 'third',
+          authorized_models: ['gpt-c'],
+        },
+      ],
+    })
+
+    expect(result.totalKeys).toBe(3)
+    expect(result.totalAuthorizedModels).toBe(3)
+  })
+
+  test('keeps catalog-only keys and their names when merging usage', () => {
+    const result = calculateKeyUsageStats({
+      token_catalog: [
+        {
+          token_id: 11,
+          token_name: 'active',
+          authorized_models: ['gpt-a'],
+        },
+        {
+          token_id: 22,
+          token_name: 'unused',
+          authorized_models: ['gpt-b'],
+        },
+      ],
+      token_quota: [{ token_id: 11, request_count: 2, total_tokens: 20 }],
+      tokens: [
+        {
+          token_id: 11,
+          prompt_tokens: 10,
+          completion_tokens: 10,
+        },
+      ],
+    })
+
+    expect(result).toHaveLength(2)
+    expect(result[0].name).toBe('active')
+    expect(result[1]).toEqual({
+      id: '22',
+      name: 'unused',
+      requestCount: 0,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cacheReadTokens: 0,
+      inputCacheHitRate: 0,
+      failedCount: 0,
+      successRate: 0,
+    })
+  })
+
   test('merges same-named keys by ID and calculates success rates', () => {
     const result = calculateKeyUsageStats({
       token_quota: [

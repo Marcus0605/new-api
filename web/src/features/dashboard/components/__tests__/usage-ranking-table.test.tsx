@@ -72,6 +72,11 @@ describe('usage ranking table', () => {
         loading={false}
         data={[]}
         logStats={{
+          token_catalog: [
+            { token_id: 11, token_name: 'shared' },
+            { token_id: 22, token_name: 'shared' },
+            { token_id: 33, token_name: 'unused' },
+          ],
           token_quota: [
             { token_id: 11, request_count: 3, total_tokens: 300 },
             { token_id: 22, request_count: 2, total_tokens: 20 },
@@ -100,10 +105,15 @@ describe('usage ranking table', () => {
     })
     expect(within(region).getByText('API Key')).toBeVisible()
     const rows = within(region).getAllByRole('row')
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(4)
     expect(within(rows[1]).getByText('shared')).toBeVisible()
     expect(within(rows[2]).getByText('shared')).toBeVisible()
     expect(within(rows[1]).getAllByRole('cell')[9]).toHaveTextContent('75%')
     expect(within(rows[2]).getAllByRole('cell')[9]).toHaveTextContent('100%')
+    const unusedCells = within(rows[3]).getAllByRole('cell')
+    expect(unusedCells[1]).toHaveTextContent('unused')
+    expect(unusedCells[2]).toHaveTextContent('0')
+    expect(unusedCells[3]).toHaveTextContent('0')
+    expect(unusedCells[8]).toHaveTextContent('0')
   })
 })

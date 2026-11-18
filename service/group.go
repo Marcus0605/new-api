@@ -1,6 +1,8 @@
 package service
 
 import (
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -149,6 +151,55 @@ func GetGroupsEnabledModelChannels(groups []string) ([]UserModelChannel, error) 
 		channels[index].Models = append(channels[index].Models, row.Model)
 	}
 	return channels, nil
+}
+
+type DashboardTokenCatalogItem struct {
+	TokenID          int      `json:"token_id"`
+	TokenName        string   `json:"token_name"`
+	AuthorizedModels []string `json:"authorized_models"`
+}
+
+func GetDashboardTokenCatalog(userId int, username string, tokenId int) ([]DashboardTokenCatalogItem, error) {
+	tokens, err := model.GetDashboardTokens(userId, username, tokenId)
+	if err != nil {
+		return nil, err
+	}
+	catalog := make([]DashboardTokenCatalogItem, 0, len(tokens))
+	userModels := make(map[int][]string)
+	for i := range tokens {
+		token := &tokens[i]
+		authorizedModels := make([]string, 0)
+		if token.ModelLimitsEnabled {
+			seen := make(map[string]struct{})
+			for _, modelName := range token.GetModelLimits() {
+				modelName = strings.TrimSpace(modelName)
+				if modelName == "" {
+					continue
+				}
+				if _, ok := seen[modelName]; ok {
+					continue
+				}
+				seen[modelName] = struct{}{}
+				authorizedModels = append(authorizedModels, modelName)
+			}
+		} else if models, ok := userModels[token.UserId]; ok {
+			authorizedModels = models
+		} else {
+			userGroup, err := model.GetUserGroup(token.UserId, false)
+			if err != nil {
+				return nil, err
+			}
+			groups := GetUserUsableGroups(userGroup)
+			authorizedModels = GetGroupsEnabledModels(slices.Sorted(maps.Keys(groups)))
+			userModels[token.UserId] = authorizedModels
+		}
+		catalog = append(catalog, DashboardTokenCatalogItem{
+			TokenID:          token.Id,
+			TokenName:        token.Name,
+			AuthorizedModels: authorizedModels,
+		})
+	}
+	return catalog, nil
 }
 
 // GetUserGroupRatio 获取用户使用某个分组的倍率

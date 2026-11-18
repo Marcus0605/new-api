@@ -57,12 +57,19 @@ export interface DashboardTokenQuotaStats {
   cache_read_tokens?: number
 }
 
+export interface DashboardTokenCatalogItem {
+  token_id: number
+  token_name: string
+  authorized_models?: string[]
+}
+
 export interface DashboardLogStats {
   prompt_tokens?: number
   completion_tokens?: number
   models?: DashboardModelLogStats[]
   tokens?: DashboardTokenLogStats[]
   token_quota?: DashboardTokenQuotaStats[]
+  token_catalog?: DashboardTokenCatalogItem[]
 }
 
 export interface DashboardUsageStats {

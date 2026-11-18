@@ -110,10 +110,15 @@ export function calculateKeyUsageStats(
 ): DashboardUsageStats[] {
   const rows = new Map<string, DashboardUsageStats>()
 
+  for (const token of logStats?.token_catalog ?? []) {
+    const id = String(token.token_id)
+    rows.set(id, emptyUsageStats(id, token.token_name))
+  }
+
   for (const token of logStats?.token_quota ?? []) {
     const id = String(token.token_id)
     const cacheRead = Number(token.cache_read_tokens) || 0
-    const current = emptyUsageStats(id, '')
+    const current = rows.get(id) ?? emptyUsageStats(id, '')
     current.requestCount = Number(token.request_count) || 0
     current.totalTokens = Number(token.total_tokens) || 0
     current.cacheReadTokens = Number.isFinite(cacheRead)
@@ -125,7 +130,9 @@ export function calculateKeyUsageStats(
   for (const token of logStats?.tokens ?? []) {
     const id = String(token.token_id)
     const current = rows.get(id) ?? emptyUsageStats(id, '')
-    current.name = token.token_name || ''
+    if (token.token_name) {
+      current.name = token.token_name
+    }
     current.promptTokens = Number(token.prompt_tokens) || 0
     current.completionTokens = Number(token.completion_tokens) || 0
     current.failedCount = Number(token.failed_count) || 0
@@ -164,11 +171,18 @@ export function calculateDashboardStats(
   )
   const totalPromptTokens = Number(logStats?.prompt_tokens) || 0
   const totalCompletionTokens = Number(logStats?.completion_tokens) || 0
+  const authorizedModels = new Set(
+    (logStats?.token_catalog ?? []).flatMap(
+      (token) => token.authorized_models ?? []
+    )
+  )
 
   return {
     ...totals,
     totalPromptTokens,
     totalCompletionTokens,
+    totalAuthorizedModels: authorizedModels.size,
+    totalKeys: logStats?.token_catalog?.length ?? 0,
     inputCacheHitRate:
       safeDivide(totals.totalCacheReadTokens, totalPromptTokens) * 100,
   }

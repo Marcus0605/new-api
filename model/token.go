@@ -114,6 +114,21 @@ func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
 	return tokens, err
 }
 
+func GetDashboardTokens(userId int, username string, tokenId int) ([]Token, error) {
+	var tokens []Token
+	query := DB.Model(&Token{}).Select("tokens.id, tokens.user_id, tokens.name, tokens.model_limits_enabled, tokens.model_limits")
+	if userId > 0 {
+		query = query.Where("tokens.user_id = ?", userId)
+	} else if username != "" {
+		query = query.Joins("JOIN users ON users.id = tokens.user_id").Where("users.username = ?", username)
+	}
+	if tokenId > 0 {
+		query = query.Where("tokens.id = ?", tokenId)
+	}
+	err := query.Order("tokens.id").Find(&tokens).Error
+	return tokens, err
+}
+
 // sanitizeLikePattern 校验并清洗用户输入的 LIKE 搜索模式。
 // 规则：
 //  1. 转义 ! 和 _（使用 ! 作为 ESCAPE 字符，兼容 MySQL/PostgreSQL/SQLite）

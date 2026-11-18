@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
 interface LogStatCardsProps {
+  variant?: 'model' | 'key'
   filters?: DashboardFilters
   onDataUpdate?: (
     data: QuotaDataItem[],
@@ -65,7 +66,7 @@ function formatStatNumber(value: number, locale: Intl.LocalesArgument) {
 
 export function LogStatCards(props: LogStatCardsProps) {
   const { i18n } = useTranslation()
-  const statCardsConfig = useModelStatCardsConfig()
+  const statCardsConfig = useModelStatCardsConfig(props.variant === 'key')
   const user = useAuthStore((state) => state.auth.user)
   const isAdmin = !!(user?.role && user.role >= 10)
   const [stats, setStats] = useState<ReturnType<
@@ -129,6 +130,8 @@ export function LogStatCards(props: LogStatCardsProps) {
     outputTokens: stats?.totalCompletionTokens ?? 0,
     cacheRead: stats?.totalCacheReadTokens ?? 0,
     inputCacheHitRate: stats?.inputCacheHitRate ?? 0,
+    authorizedModels: stats?.totalAuthorizedModels ?? 0,
+    keys: stats?.totalKeys ?? 0,
   }
 
   const items = statCardsConfig.map((config) => {
@@ -155,7 +158,14 @@ export function LogStatCards(props: LogStatCardsProps) {
 
   return (
     <div className='overflow-hidden rounded-lg border'>
-      <div className='divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3 lg:grid-cols-8'>
+      <div
+        className={cn(
+          'divide-border/60 grid min-w-0 grid-cols-2 divide-x sm:grid-cols-3',
+          props.variant === 'key'
+            ? 'lg:grid-cols-5 xl:grid-cols-10'
+            : 'lg:grid-cols-8'
+        )}
+      >
         {items.map((it, idx) => {
           const Icon = it.icon
           let valueContent

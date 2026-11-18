@@ -60,6 +60,21 @@ func exportedRequestIds(lines []map[string]any) []any {
 func seedExportLogs(t *testing.T, mainDB *gorm.DB, logDB *gorm.DB, now int64) {
 	t.Helper()
 	require.NoError(t, mainDB.Create(&model.Channel{Id: 9, Name: "primary"}).Error)
+	users := []model.User{
+		{Id: 1, Username: "alice", Group: "default", AffCode: "alice"},
+		{Id: 2, Username: "bob", Group: "default", AffCode: "bob"},
+	}
+	for i := range users {
+		require.NoError(t, mainDB.Create(&users[i]).Error)
+	}
+	tokens := []model.Token{
+		{Id: 11, UserId: 1, Key: "alice-first", Name: "alice-first", ModelLimitsEnabled: true, ModelLimits: "gpt-a, gpt-b,gpt-a"},
+		{Id: 12, UserId: 1, Key: "alice-unused", Name: "alice-unused", ModelLimitsEnabled: true, ModelLimits: "gpt-c"},
+		{Id: 21, UserId: 2, Key: "bob-first", Name: "bob-first", ModelLimitsEnabled: true, ModelLimits: "gpt-b"},
+	}
+	for i := range tokens {
+		require.NoError(t, mainDB.Create(&tokens[i]).Error)
+	}
 	logs := []model.Log{
 		{UserId: 1, Username: "alice", CreatedAt: now - 3600, Type: model.LogTypeConsume, ModelName: "gpt-a", ChannelId: 9, Quota: 10, PromptTokens: 100, CompletionTokens: 50, UseTime: 10, RequestId: "a-1", Other: `{"cache_tokens":40,"admin_info":{"use_channel":["9"]}}`},
 		{UserId: 2, Username: "bob", CreatedAt: now - 1800, Type: model.LogTypeConsume, ModelName: "gpt-b", ChannelId: 9, Quota: 20, PromptTokens: 200, CompletionTokens: 100, UseTime: 30, RequestId: "b-1", Other: `{"cache_tokens":60}`},
@@ -112,7 +127,7 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 				mainType = common.DatabaseTypeSQLite
 			}
 			useLogExportDatabases(t, mainDB, db, mainType, tc.typ)
-			require.NoError(t, mainDB.AutoMigrate(&model.Channel{}, &model.QuotaData{}))
+			require.NoError(t, mainDB.AutoMigrate(&model.Channel{}, &model.QuotaData{}, &model.User{}, &model.Token{}, &model.Ability{}))
 			if tc.kind == "clickhouse" {
 				t.Setenv("LOG_SQL_DSN", isolatedDSN)
 				require.NoError(t, model.InitLogDB())
@@ -143,12 +158,32 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 			assert.EqualValues(t, 50, selfStat["data"].(map[string]any)["completion_tokens"])
 			assert.EqualValues(t, 40, selfStat["data"].(map[string]any)["cache_read_tokens"])
 			assert.EqualValues(t, 10, selfStat["data"].(map[string]any)["average_use_time"])
+			selfCatalog := selfStat["data"].(map[string]any)["token_catalog"].([]any)
+			require.Len(t, selfCatalog, 2)
+			assert.EqualValues(t, 11, selfCatalog[0].(map[string]any)["token_id"])
+			assert.Equal(t, "alice-first", selfCatalog[0].(map[string]any)["token_name"])
+			assert.Equal(t, []any{"gpt-a", "gpt-b"}, selfCatalog[0].(map[string]any)["authorized_models"])
+			assert.Equal(t, "alice-unused", selfCatalog[1].(map[string]any)["token_name"])
+			assert.Equal(t, []any{"gpt-c"}, selfCatalog[1].(map[string]any)["authorized_models"])
 			allStat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query)[0]
 			require.Equal(t, true, allStat["success"])
 			assert.EqualValues(t, 300, allStat["data"].(map[string]any)["prompt_tokens"])
 			assert.EqualValues(t, 150, allStat["data"].(map[string]any)["completion_tokens"])
 			assert.EqualValues(t, 100, allStat["data"].(map[string]any)["cache_read_tokens"])
 			assert.EqualValues(t, 20, allStat["data"].(map[string]any)["average_use_time"])
+			allCatalog := allStat["data"].(map[string]any)["token_catalog"].([]any)
+			assert.Len(t, allCatalog, 3)
+			aliceStat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query+"&username=alice")[0]
+			require.Equal(t, true, aliceStat["success"])
+			assert.Len(t, aliceStat["data"].(map[string]any)["token_catalog"], 2)
+			bobStat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query+"&token_id=21")[0]
+			require.Equal(t, true, bobStat["success"])
+			bobCatalog := bobStat["data"].(map[string]any)["token_catalog"].([]any)
+			require.Len(t, bobCatalog, 1)
+			assert.Equal(t, "bob-first", bobCatalog[0].(map[string]any)["token_name"])
+			otherUserStat := callLogHandler(t, GetLogsSelfStat, 1, common.RoleCommonUser, query+"&token_id=21")[0]
+			require.Equal(t, true, otherUserStat["success"])
+			assert.Empty(t, otherUserStat["data"].(map[string]any)["token_catalog"])
 			emptyStat := callLogHandler(t, GetLogsStat, 3, common.RoleAdminUser, query+"&model_name=missing")[0]
 			require.Equal(t, true, emptyStat["success"])
 			assert.EqualValues(t, 0, emptyStat["data"].(map[string]any)["cache_read_tokens"])
@@ -174,9 +209,10 @@ func TestLogExportDatabaseMatrix(t *testing.T) {
 
 func TestLogExportRules(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	initModelListColumnNames(t)
 	db, _ := newAuditTestDatabase(t, "sqlite", "")
 	useLogExportDatabases(t, db, db, common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
-	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Log{}, &model.QuotaData{}))
+	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Log{}, &model.QuotaData{}, &model.User{}, &model.Token{}, &model.Ability{}))
 	now := time.Now().Unix()
 	seedExportLogs(t, db, db, now)
 	logSetting := operation_setting.GetLogSetting()
@@ -184,6 +220,17 @@ func TestLogExportRules(t *testing.T) {
 	t.Cleanup(func() { *logSetting = previousSetting })
 	recent := fmt.Sprintf("start_timestamp=%d&end_timestamp=%d", now-2*24*3600, now)
 	tooLong := fmt.Sprintf("start_timestamp=%d&end_timestamp=%d", now-366*24*3600, now)
+
+	t.Run("unrestricted keys inherit user models", func(t *testing.T) {
+		require.NoError(t, db.Create(&model.Token{Id: 13, UserId: 1, Key: "alice-unrestricted", Name: "alice-unrestricted"}).Error)
+		require.NoError(t, db.Create(&model.Ability{Group: "default", Model: "gpt-d", ChannelId: 9, Enabled: true}).Error)
+		stat := callLogHandler(t, GetLogsSelfStat, 1, common.RoleCommonUser, recent)[0]
+		require.Equal(t, true, stat["success"])
+		catalog := stat["data"].(map[string]any)["token_catalog"].([]any)
+		require.Len(t, catalog, 3)
+		assert.Equal(t, "alice-unrestricted", catalog[2].(map[string]any)["token_name"])
+		assert.Equal(t, []any{"gpt-d"}, catalog[2].(map[string]any)["authorized_models"])
+	})
 
 	t.Run("time range", func(t *testing.T) {
 		rejected := callLogHandler(t, ExportAllLogs, 3, common.RoleAdminUser, tooLong)

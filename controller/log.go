@@ -220,6 +220,11 @@ func GetLogsStat(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	tokenCatalog, err := service.GetDashboardTokenCatalog(0, username, tokenID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, "")
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -235,6 +240,7 @@ func GetLogsStat(c *gin.Context) {
 			"models":            stat.Models,
 			"tokens":            stat.Tokens,
 			"token_quota":       tokenQuota,
+			"token_catalog":     tokenCatalog,
 		},
 	})
 	return
@@ -267,6 +273,11 @@ func GetLogsSelfStat(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	tokenCatalog, err := service.GetDashboardTokenCatalog(c.GetInt("id"), "", tokenID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
 	c.JSON(200, gin.H{
 		"success": true,
@@ -282,6 +293,7 @@ func GetLogsSelfStat(c *gin.Context) {
 			"models":            quotaNum.Models,
 			"tokens":            quotaNum.Tokens,
 			"token_quota":       tokenQuota,
+			"token_catalog":     tokenCatalog,
 			//"token": tokenNum,
 		},
 	})

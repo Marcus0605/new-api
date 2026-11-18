@@ -28,6 +28,8 @@ import {
   Flame,
   TrendingUp,
   Activity,
+  Boxes,
+  KeyRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -44,18 +46,42 @@ interface StatCardConfig {
   getValue: (stat: Record<string, number>, days?: number) => number
 }
 
-export function useModelStatCardsConfig(): StatCardConfig[] {
+export function useModelStatCardsConfig(
+  includeKeyStats = false
+): StatCardConfig[] {
   const { t } = useTranslation()
+
+  const keyStats: StatCardConfig[] = includeKeyStats
+    ? [
+        {
+          key: 'authorizedModels',
+          title: t('Authorized Models'),
+          description: t('Unique authorized models'),
+          icon: Boxes,
+          iconTone: 'chart-2',
+          getValue: (stat) => stat?.authorizedModels ?? 0,
+        },
+        {
+          key: 'keys',
+          title: t('Total Keys'),
+          description: t('API keys in current filter'),
+          icon: KeyRound,
+          iconTone: 'chart-3',
+          getValue: (stat) => stat?.keys ?? 0,
+        },
+      ]
+    : []
 
   return [
     {
       key: 'count',
-      title: t('Total Count'),
+      title: t('Total Requests'),
       description: t('Statistical count'),
       icon: Hash,
       iconTone: 'info',
       getValue: (stat) => stat?.rpm ?? 0,
     },
+    ...keyStats,
     {
       key: 'tokens',
       title: t('Total Tokens'),
