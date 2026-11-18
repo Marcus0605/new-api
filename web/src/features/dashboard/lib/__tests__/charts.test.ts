@@ -130,11 +130,11 @@ describe.each(cases)('dashboard $granularity chart chronology', (scenario) => {
     const data = unorderedUsage(scenario.start, scenario.interval)
     const original = structuredClone(data)
     const result = processUserChartData(data, scenario.granularity)
-    const values: Array<{ Time: string; rawQuota: number }> =
+    const values: Array<{ Time: string; rawTokens: number }> =
       result.spec_user_trend.data[0].values
 
     expect(values.map((row) => row.Time)).toEqual(scenario.labels)
-    expect(values.map((row) => row.rawQuota / 500000)).toEqual([
+    expect(values.map((row) => row.rawTokens / 1000)).toEqual([
       11, 2, 3, 4, 5, 6, 7, 8,
     ])
     expect(data).toEqual(original)
@@ -222,5 +222,75 @@ describe('dashboard token distribution', () => {
 
   test('shows zero tokens when there is no usage data', () => {
     expect(processChartData([]).totalTokenDisplay).toBe('0')
+  })
+})
+
+describe('dashboard user token consumption', () => {
+  test('uses token totals for ranking, trends, labels, and tooltips', () => {
+    const timestamp = new Date('2026-01-01T08:00:00').getTime() / 1000
+    const result = processUserChartData(
+      [
+        {
+          created_at: timestamp,
+          username: 'alice',
+          quota: 1,
+          token_used: 1200,
+        },
+        {
+          created_at: timestamp,
+          username: 'bob',
+          quota: 9999999,
+          token_used: 345,
+        },
+        {
+          created_at: timestamp,
+          username: 'alice',
+          quota: 2,
+          token_used: 455,
+        },
+      ],
+      'hour'
+    )
+
+    expect(result.spec_user_rank.xField).toBe('rawTokens')
+    expect(result.spec_user_trend.yField).toBe('rawTokens')
+    expect(result.spec_user_rank.data[0].values).toEqual([
+      { User: 'alice', rawTokens: 1655, Usage: 1655 },
+      { User: 'bob', rawTokens: 345, Usage: 345 },
+    ])
+    expect(result.spec_user_trend.data[0].values).toEqual([
+      {
+        Time: '01-01 08:00',
+        User: 'alice',
+        rawTokens: 1655,
+        Usage: 1655,
+      },
+      {
+        Time: '01-01 08:00',
+        User: 'bob',
+        rawTokens: 345,
+        Usage: 345,
+      },
+    ])
+    expect(result.spec_user_rank.title.subtext).toBe('Total: 2,000')
+    expect(result.spec_user_trend.title.subtext).toBe('Total: 2,000')
+    expect(result.spec_user_rank.label.formatMethod(1655)).toBe('1,655')
+    expect(
+      result.spec_user_rank.tooltip.mark.content[0].value({
+        rawTokens: 1655,
+      })
+    ).toBe('1,655')
+    expect(
+      result.spec_user_trend.tooltip.mark.content[0].value({
+        rawTokens: 345,
+      })
+    ).toBe('345')
+  })
+
+  test('uses token fields for empty ranking and trend charts', () => {
+    const result = processUserChartData([])
+
+    expect(result.spec_user_rank.xField).toBe('rawTokens')
+    expect(result.spec_user_trend.yField).toBe('rawTokens')
   })
 })
