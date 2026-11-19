@@ -142,6 +142,19 @@ afterEach(async () => {
   await i18next.changeLanguage('en')
 })
 
+it('uses the full current day as the default log time range', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 10, 18, 12, 34, 56))
+
+  await renderMobileFilter()
+
+  expect(
+    screen.getByRole('button', {
+      name: /2026-11-18 00:00:00.*2026-11-18 23:59:59/,
+    })
+  ).toBeVisible()
+})
+
 it('applies the selected mobile date range directly and resets pagination while retaining filters', async () => {
   const router = await renderMobileFilter()
   const user = userEvent.setup()
